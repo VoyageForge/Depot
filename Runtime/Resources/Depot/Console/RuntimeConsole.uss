@@ -192,23 +192,58 @@
     min-height: 0;
 }
 
-/* 垂直滚动条：变细、圆角、半透明，贴合深色主题 */
+/* 只保留垂直滚动条：隐藏水平滚动条（日志消息自动换行，无需横向滚动） */
+.console-list .unity-scroll-view__horizontal-scroller {
+    display: none;
+}
+
+/* 垂直滚动条容器：固定宽度 */
 .console-list .unity-scroll-view__vertical-scroller {
-    width: 8px;
+    width: 10px;
 }
 
-.console-list .unity-scroller__tracker {
-    background-color: rgba(0, 0, 0, 0);
+/* 隐藏滚动条两端的箭头按钮 */
+.console-list .unity-scroller__low-button,
+.console-list .unity-scroller__high-button {
+    display: none;
 }
 
-.console-list .unity-scroller__dragger {
-    background-color: rgba(255, 255, 255, 0.16);
-    border-radius: 4px;
+/* 滚动块容器（ScrollerSlider）：宽度填满 scroller */
+.console-list .unity-scroller__slider {
+    width: 10px;
+    max-width: 10px;
+    min-width: 0;
+}
+
+/* 拖动容器：限制宽度 */
+.console-list .unity-base-slider__drag-container {
+    width: 10px;
+    max-width: 10px;
+}
+
+/* 轨道（背景）：淡色圆角，宽度限制 */
+.console-list .unity-base-slider__tracker {
+    width: 10px;
+    max-width: 10px;
+    background-color: rgba(255, 255, 255, 0.12);
+    border-radius: 5px;
+}
+
+/* 滚动块：高对比颜色、圆角、无边框 */
+.console-list .unity-base-slider__dragger {
+    background-color: rgba(255, 255, 255, 0.55);
+    border-radius: 5px;
     border-width: 0;
 }
 
-.console-list .unity-scroller__dragger:hover {
-    background-color: rgba(255, 255, 255, 0.26);
+/* 滚动块边框：去掉默认边框 */
+.console-list .unity-base-slider__dragger-border {
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+}
+
+.console-list .unity-base-slider__dragger:hover {
+    background-color: rgba(255, 255, 255, 0.75);
 }
 
 .console-entry {

@@ -37,6 +37,29 @@ namespace VoyageForge.Depot.Runtime.Console
         {
             _list = list;
             _maxEntries = maxEntries;
+
+            // 提高滚轮滚动速度（默认每次滚动太少，滚几圈才动一点）
+            _list.mouseWheelScrollSize = 120f;
+
+            // 让垂直滚动条变细：递归限制 scroller 内部所有元素宽度为 10px
+            ConstrainScrollbarWidth(_list.verticalScroller, 10f);
+        }
+
+        /// <summary>递归限制滚动条内部所有元素的宽度（USS 无法覆盖 slider 内部默认 24px，改用代码设置）。</summary>
+        private static void ConstrainScrollbarWidth(VisualElement element, float width)
+        {
+            if (element == null)
+            {
+                return;
+            }
+
+            element.style.width = width;
+            element.style.maxWidth = width;
+
+            foreach (VisualElement child in element.Children())
+            {
+                ConstrainScrollbarWidth(child, width);
+            }
         }
 
         /// <summary>命令执行期间产生的日志是否强制滚动到底部。</summary>
