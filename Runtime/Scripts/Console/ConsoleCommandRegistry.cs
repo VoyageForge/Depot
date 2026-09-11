@@ -150,6 +150,39 @@ namespace VoyageForge.Depot.Runtime.Console
             return matches;
         }
 
+        /// <summary>
+        /// 解析命令输入：把 "hello Tom" 拆成命令名 "hello"、已完成参数 args、正在输入的参数 currentInput。
+        /// 用于参数补全。仅当输入含空格（已进入参数阶段）时返回 true。
+        /// </summary>
+        /// <param name="text">输入框当前内容。</param>
+        /// <param name="commandName">解析出的命令名。</param>
+        /// <param name="args">已完成的参数（不含正在输入的部分）。</param>
+        /// <param name="currentInput">正在输入的参数片段（可能为空字符串）。</param>
+        /// <returns>是否成功解析（输入含空格）。</returns>
+        public static bool TryParseArgumentInput(string text, out string commandName, out string[] args, out string currentInput)
+        {
+            commandName = null;
+            args = Array.Empty<string>();
+            currentInput = string.Empty;
+
+            if (string.IsNullOrEmpty(text))
+            {
+                return false;
+            }
+
+            string[] parts = text.Split(' ');
+            if (parts.Length < 2)
+            {
+                return false;
+            }
+
+            commandName = parts[0];
+            currentInput = parts[parts.Length - 1];
+            args = new string[parts.Length - 2];
+            Array.Copy(parts, 1, args, 0, args.Length);
+            return true;
+        }
+
         /// <summary>返回当前已加载的、需要扫描的程序集（已过滤 Unity/.NET 基础程序集）。</summary>
         /// <returns>需要扫描的程序集数组。</returns>
         public static Assembly[] GetScanAssemblies()

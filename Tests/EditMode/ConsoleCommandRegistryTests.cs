@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -121,6 +122,81 @@ namespace VoyageForge.Depot.Tests
             Assert.IsEmpty(completions);
         }
 
+        // ---- 参数解析（TryParseArgumentInput）----
+
+        [Test]
+        public void TryParseArgumentInput_单个参数_正确解析()
+        {
+            bool ok = ConsoleCommandRegistry.TryParseArgumentInput("hello Tom", out string cmd, out string[] args, out string current);
+
+            Assert.IsTrue(ok);
+            Assert.AreEqual("hello", cmd);
+            Assert.IsEmpty(args);
+            Assert.AreEqual("Tom", current);
+        }
+
+        [Test]
+        public void TryParseArgumentInput_多参数_正确解析()
+        {
+            bool ok = ConsoleCommandRegistry.TryParseArgumentInput("login alice adm", out string cmd, out string[] args, out string current);
+
+            Assert.IsTrue(ok);
+            Assert.AreEqual("login", cmd);
+            CollectionAssert.AreEqual(new[] { "alice" }, args);
+            Assert.AreEqual("adm", current);
+        }
+
+        [Test]
+        public void TryParseArgumentInput_末尾空格_当前参数为空()
+        {
+            bool ok = ConsoleCommandRegistry.TryParseArgumentInput("hello ", out string cmd, out string[] args, out string current);
+
+            Assert.IsTrue(ok);
+            Assert.AreEqual("hello", cmd);
+            Assert.IsEmpty(args);
+            Assert.AreEqual(string.Empty, current);
+        }
+
+        [Test]
+        public void TryParseArgumentInput_无空格_返回false()
+        {
+            Assert.IsFalse(ConsoleCommandRegistry.TryParseArgumentInput("hello", out _, out _, out _));
+        }
+
+        [Test]
+        public void TryParseArgumentInput_空输入_返回false()
+        {
+            Assert.IsFalse(ConsoleCommandRegistry.TryParseArgumentInput("", out _, out _, out _));
+        }
+
+        // ---- 命令参数补全（GetArgumentCompletions）----
+
+        [Test]
+        public void GetArgumentCompletions_第一个参数无提示_返回空()
+        {
+            ArgumentCompletionCommand command = new ArgumentCompletionCommand();
+
+            Assert.IsEmpty(command.GetArgumentCompletions(new string[0], string.Empty));
+        }
+
+        [Test]
+        public void GetArgumentCompletions_第二个参数_按前缀提示()
+        {
+            ArgumentCompletionCommand command = new ArgumentCompletionCommand();
+
+            IReadOnlyList<string> completions = command.GetArgumentCompletions(new[] { "alice" }, "a");
+
+            CollectionAssert.AreEqual(new[] { "admin" }, completions);
+        }
+
+        [Test]
+        public void GetArgumentCompletions_参数填完_返回空()
+        {
+            ArgumentCompletionCommand command = new ArgumentCompletionCommand();
+
+            Assert.IsEmpty(command.GetArgumentCompletions(new[] { "alice", "admin" }, string.Empty));
+        }
+
         /// <summary>
         /// 测试用命令：带无参构造（供反射发现）与带参构造（供注册测试），无实际行为。
         /// </summary>
@@ -145,6 +221,40 @@ namespace VoyageForge.Depot.Tests
             public override void Execute(string[] args)
             {
                 // 测试用命令，无需实际行为
+            }
+        }
+
+        /// <summary>参数补全测试命令：第一个参数无提示，第二个参数提示角色，两个参数填完不再提示。</summary>
+        private sealed class ArgumentCompletionCommand : ConsoleCommand
+        {
+            /// <inheritdoc />
+            public override string Name => "argtest";
+
+            /// <inheritdoc />
+            public override void Execute(string[] args)
+            {
+                // 测试用命令，无需实际行为
+            }
+
+            /// <inheritdoc />
+            public override IReadOnlyList<string> GetArgumentCompletions(string[] args, string currentInput)
+            {
+                // 第一个参数：无提示
+                if (args.Length == 0)
+                {
+                    return Array.Empty<string>();
+                }
+
+                // 两个参数都填完：不再提示
+                if (args.Length >= 2)
+                {
+                    return Array.Empty<string>();
+                }
+
+                // 第二个参数：按前缀提示角色
+                return new[] { "admin", "user" }
+                    .Where(r => r.StartsWith(currentInput, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
             }
         }
     }
