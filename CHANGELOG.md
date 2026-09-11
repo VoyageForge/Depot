@@ -4,6 +4,12 @@
 
 ## v0.0.22
 
+### Added
+- 新增 `RuntimeConsole.SetTextSettings(PanelTextSettings)` 接口，支持自定义加载字体（如中文字体）。
+
+### Changed
+- 控制台中文字体资源（Noto Sans SC）移至 Sample，由用户按需加载，避免内置字体增大包体。
+
 ### Fixed
 - 修复控制台日志列表滚动条样式：滚动条变细（10px）、只保留垂直滚动条（隐藏水平滚动条与两端箭头按钮）、优化鼠标滚轮滚动速度。
 

@@ -67,6 +67,12 @@ namespace VoyageForge.Depot.Runtime.Console
         private ConsoleCommandLine _commandLine; // 命令输入行
 
         // ---------------------------------------------------------------
+        // 自定义字体（文本设置）
+        // ---------------------------------------------------------------
+
+        private static PanelTextSettings _customTextSettings;  // 用户自定义的文本设置（如中文字体）
+
+        // ---------------------------------------------------------------
         // 拖拽状态
         // ---------------------------------------------------------------
 
@@ -109,6 +115,17 @@ namespace VoyageForge.Depot.Runtime.Console
         public static RuntimeConsole Initialize()
         {
             return Instance;
+        }
+
+        /// <summary>
+        /// 设置控制台使用的自定义文本设置（PanelTextSettings），用于加载自定义字体（如中文字体）。
+        /// 需在 <see cref="Initialize"/> 之前调用，面板构建时会应用。
+        /// 传入 null 则恢复使用默认文本设置。
+        /// </summary>
+        /// <param name="textSettings">PanelTextSettings 资源；null 恢复默认。</param>
+        public static void SetTextSettings(PanelTextSettings textSettings)
+        {
+            _customTextSettings = textSettings;
         }
 
         // ---------------------------------------------------------------
@@ -205,6 +222,12 @@ namespace VoyageForge.Depot.Runtime.Console
             }
 
             _document.sortingOrder = 32767;
+
+            // 应用用户自定义的文本设置（中文字体等）
+            if (_customTextSettings != null)
+            {
+                _document.panelSettings.textSettings = _customTextSettings;
+            }
 
             VisualTreeAsset uxml = Resources.Load<VisualTreeAsset>(UxmlResourcePath);
             if (uxml == null)
