@@ -1,6 +1,6 @@
 {
   "name": "com.voyageforge.depot",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "displayName": "Depot",
   "description": "Voyage Depot is a shared utility stockroom for Unity projects, collecting reusable runtime helpers, editor tooling, and common extensions.",
   "unity": "2022.3",
