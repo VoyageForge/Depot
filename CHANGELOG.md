@@ -2,6 +2,11 @@
 
 本文件由开发者手动维护，发布流程不会自动生成或修改此文件。
 
+## v0.0.23
+
+### Changed
+- 中文字体资源移至 Sample 的 `Resources/Depot/Console/Fonts` 目录，导入 Sample 后可直接通过 `Resources.Load` 加载，无需手动移动。
+
 ## v0.0.22
 
 ### Added
