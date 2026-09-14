@@ -1,4 +1,0 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" engine="UnityEngine.UIElements" editor-extension-mode="True">
-    <Style src="project://database/Assets/Depot/Editor/Scripts/FileBrowser/LabelGroup/LabelGroup.uss?fileID=7433441132597879392&amp;guid=a172441024984079a110a00eb93d3137&amp;type=3#LabelGroup" />
-    
-</ui:UXML>

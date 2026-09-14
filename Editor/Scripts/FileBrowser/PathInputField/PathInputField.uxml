@@ -1,4 +1,0 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" engine="UnityEngine.UIElements" editor-extension-mode="True">
-    <Style src="project://database/Assets/Depot/Editor/Scripts/FileBrowser/PathInputField/PathInputField.uss?fileID=7433441132597879392&amp;guid=842b97e578f042a1aa8f99b6ff77241b&amp;type=3#PathInputField" />
- 
-</ui:UXML>

@@ -1,5 +1,0 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" engine="UnityEngine.UIElements" editor-extension-mode="True">
-    <Style src="project://database/Assets/Depot/Editor/Scripts/FileBrowser/LabelGroup/Item/LabelItem.uss?fileID=7433441132597879392&amp;guid=514008281cb04017a2bb26cf36760102&amp;type=3#LabelItem" />
-    <ui:Label name="label" text="123456" class="label-name" />
-    <ui:Button name="button" class="close-button" style="align-self: flex-start; width: 20px; height: 20px;" />
-</ui:UXML>

@@ -1,8 +1,0 @@
-:root {
-    flex-grow: 1;
-    flex-direction: row;
-    height: 100%;
-    align-items: stretch;
-    min-height: 40px;
-    background-color: aliceblue;
-}
