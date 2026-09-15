@@ -7,6 +7,7 @@
 ### Added
 - 新增 `RuntimeConsole.Log / Warning / Error` 直接输出接口：编辑/运行环境自适应，自动捕获调用方栈，不依赖日志桥接。
 - 新增日志监听开关命令 `listen`（`on` / `off` / `autostart on|off`）：可关闭日志捕获以降低开销，支持自启动设置，开关状态持久化到 PlayerPrefs。
+- 命令系统新增 `OnCreate` / `OnDestroy` 生命周期：命令注册成功 / 被移除时在主线程触发，供命令订阅事件、初始化与清理资源。
 - 新增 `Font` 样本（`Samples~/Font`）：Noto Sans SC 字体资源（源字体、字符集与生成的 SDF 字体资产），供 `Runtime Console Sample` 渲染中文。
 
 ### Changed
