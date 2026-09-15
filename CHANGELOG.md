@@ -5,6 +5,7 @@
 ## v0.0.24
 
 ### Added
+- 新增日志监听开关命令 `listen`（`on` / `off` / `autostart on|off`）：可关闭日志捕获以降低开销，支持自启动设置，开关状态持久化到 PlayerPrefs。
 - 新增 `Font` 样本（`Samples~/Font`）：Noto Sans SC 字体资源（源字体、字符集与生成的 SDF 字体资产），供 `Runtime Console Sample` 渲染中文。
 
 ### Changed

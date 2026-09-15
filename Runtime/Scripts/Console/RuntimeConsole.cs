@@ -24,6 +24,10 @@ namespace VoyageForge.Depot.Runtime.Console
         private const string UssResourcePath = "Depot/Console/RuntimeConsole";
         private const string PanelSettingsResourcePath = "Depot/Console/RuntimeConsole";
 
+        // PlayerPrefs 键：日志监听开关与自启动开关（持久化到本地）
+        private const string ListenLogsPrefKey = "Depot.Console.ListenLogs";
+        private const string AutoStartListeningPrefKey = "Depot.Console.AutoStartListening";
+
         // ---------------------------------------------------------------
         // 可配置字段（Inspector 中可见）
         // ---------------------------------------------------------------
@@ -71,6 +75,9 @@ namespace VoyageForge.Depot.Runtime.Console
         // ---------------------------------------------------------------
 
         private static PanelTextSettings _customTextSettings;  // 用户自定义的文本设置（如中文字体）
+
+        /// <summary>当前是否正在监听 Unity 日志（已订阅 logMessageReceived）。</summary>
+        private bool _listening;
 
         // ---------------------------------------------------------------
         // 拖拽状态
@@ -129,19 +136,86 @@ namespace VoyageForge.Depot.Runtime.Console
         }
 
         // ---------------------------------------------------------------
+        // 日志监听开关（可持久化）
+        // ---------------------------------------------------------------
+
+        /// <summary>当前单例是否正在监听日志（无实例时返回 false）。</summary>
+        public static bool IsListening => HasInstance && Instance._listening;
+
+        /// <summary>
+        /// 是否自启动监听（持久化到 PlayerPrefs）。
+        /// 开启后，RuntimeConsole 初始化时会自动开始监听日志。
+        /// </summary>
+        public static bool AutoStartListening
+        {
+            get => PlayerPrefs.GetInt(AutoStartListeningPrefKey, 1) == 1;
+            set => PlayerPrefs.SetInt(AutoStartListeningPrefKey, value ? 1 : 0);
+        }
+
+        /// <summary>
+        /// 设置日志监听开关并持久化（供 listen on/off 命令调用）。
+        /// 若单例已存在会立即生效，否则仅写入 PlayerPrefs（下次初始化时生效）。
+        /// </summary>
+        /// <param name="listen">true 开始监听；false 停止监听。</param>
+        public static void SetListening(bool listen)
+        {
+            PlayerPrefs.SetInt(ListenLogsPrefKey, listen ? 1 : 0);
+
+            if (HasInstance)
+            {
+                Instance.ApplyListening(listen);
+            }
+        }
+
+        /// <summary>
+        /// 直接向控制台写入一条日志（绕过 logMessageReceived）。
+        /// 用于监听关闭时仍能显示命令输出（例如 listen 命令的状态提示）。
+        /// </summary>
+        /// <param name="message">日志内容。</param>
+        /// <param name="type">日志类型（默认 Log）。</param>
+        public static void WriteDirect(string message, LogType type = LogType.Log)
+        {
+            if (HasInstance)
+            {
+                Instance.HandleLog(message, string.Empty, type);
+            }
+        }
+
+        /// <summary>订阅或取消订阅 Unity 日志回调（幂等）。</summary>
+        /// <param name="listen">true 订阅；false 取消订阅。</param>
+        private void ApplyListening(bool listen)
+        {
+            if (_listening == listen)
+            {
+                return;
+            }
+
+            _listening = listen;
+
+            if (listen)
+            {
+                Application.logMessageReceived += HandleLog;
+            }
+            else
+            {
+                Application.logMessageReceived -= HandleLog;
+            }
+        }
+
+        // ---------------------------------------------------------------
         // 生命周期（继承自 MonoSingleton）
         // ---------------------------------------------------------------
 
-        /// <summary>MonoSingleton 初始化回调：构建面板、启动后台扫描命令并开始监听日志。</summary>
+        /// <summary>MonoSingleton 初始化回调：构建面板、启动后台扫描命令，并按自启动设置决定是否开始监听日志。</summary>
         protected override void OnInitialize()
         {
             BuildPanel();
             StartCommandScan();
 
-            // 初始化完成后立即开始监听日志：不依赖 OnEnable/OnDisable，
-            // 避免组件被禁用或重新启用时漏收/重复监听日志。
-            // 监听在 OnDestroying 中一次性移除，与这里配对。
-            Application.logMessageReceived += HandleLog;
+            // 日志监听：自启动开启时初始化即开始监听；关闭时按持久化的“是否监听”恢复上次状态。
+            // 自启动由 listen autostart on/off 命令控制，“是否监听”由 listen on/off 控制，均持久化在 PlayerPrefs。
+            bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 1) == 1;
+            ApplyListening(listen);
 
             OnConsoleInitialized();
         }
@@ -155,10 +229,10 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>每收到一条日志时调用（在写入缓冲之后）。派生类可重写。</summary>
         protected virtual void OnLogReceived(ConsoleLogEntry entry) { }
 
-        /// <summary>销毁时移除日志监听（与初始化时的一次性订阅配对）。</summary>
+        /// <summary>销毁时移除日志监听（若仍在监听）。</summary>
         protected override void OnDestroying()
         {
-            Application.logMessageReceived -= HandleLog;
+            ApplyListening(false);
         }
 
         private void Update()
