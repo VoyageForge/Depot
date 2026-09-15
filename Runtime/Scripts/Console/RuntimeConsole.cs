@@ -51,7 +51,7 @@ namespace VoyageForge.Depot.Runtime.Console
         private VisualElement _panel;
         private VisualElement _consoleRoot;
         private VisualElement _header;
-        private ScrollView _list;
+        private ListView _list;
         private TextField _commandInput;
         private VisualElement _commandBar;
         private VisualElement _loadingOverlay;
@@ -262,7 +262,7 @@ namespace VoyageForge.Depot.Runtime.Console
             // 查询 UXML 中的关键元素
             _consoleRoot = _panel.Q<VisualElement>("console-root");
             _header = _panel.Q<VisualElement>("console-header");
-            _list = _panel.Q<ScrollView>("console-list");
+            _list = _panel.Q<ListView>("console-list");
             _commandInput = _panel.Q<TextField>("console-command-input");
             _commandBar = _panel.Q<VisualElement>("console-command-bar");
 
@@ -347,12 +347,12 @@ namespace VoyageForge.Depot.Runtime.Console
             EntryLogged?.Invoke(entry);
             OnLogReceived(entry);
 
-            // 面板可见时才重建列表（实例化日志 item）；隐藏时仅写入缓冲，不实例化任何 UI 元素，
+            // 面板可见时才刷新列表（增量渲染新日志）；隐藏时仅写入缓冲，不实例化任何 UI 元素，
             // 待下次显示时由 SetVisible(true) 统一重建。
             // 仅“命令执行期间”或“本来就在底部”才滚动到底部。
             if (IsShown)
             {
-                _logList.RebuildList(_logList.ForceScrollToBottom || _logList.IsAtBottom());
+                _logList.RefreshView(_logList.ForceScrollToBottom || _logList.IsAtBottom());
             }
         }
 

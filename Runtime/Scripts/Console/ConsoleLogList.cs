@@ -7,15 +7,21 @@ namespace VoyageForge.Depot.Runtime.Console
 {
     /// <summary>
     /// 控制台日志列表视图：负责日志缓冲、级别过滤、计数与列表渲染。
-    /// 从 <see cref="RuntimeConsole"/> 拆分出来，保持单一职责。
+    ///
+    /// 性能说明：
+    /// 使用虚拟化 <see cref="ListView"/>（makeItem / bindItem）替代全量 <see cref="ScrollView"/> 重建。
+    /// ListView 只为“可见区域”创建行元素，滚动时回收复用；大量日志时不再 O(n) 全量
+    /// 清空重建（旧实现每条日志都 Clear + 重加最多 300 行），行元素数量从缓冲上限降到一屏可见数量。
     /// </summary>
     public sealed class ConsoleLogList
     {
-        private readonly ScrollView _list;
+        private readonly ListView _list;          // 虚拟化日志列表
+        private readonly ScrollView _scrollView;  // ListView 内部的 ScrollView（用于滚轮速度 / 滚动条定制）
         private readonly int _maxEntries;
 
         // 日志缓冲与过滤状态
-        private readonly List<ConsoleLogEntry> _entries = new List<ConsoleLogEntry>();
+        private readonly List<ConsoleLogEntry> _entries = new List<ConsoleLogEntry>();          // 完整缓冲（旧 -> 新）
+        private readonly List<LogRowModel> _viewItems = new List<LogRowModel>();                // ListView 数据源（已过滤 + 展开状态）
         private readonly Dictionary<ConsoleFilter, VisualElement> _filterButtons = new Dictionary<ConsoleFilter, VisualElement>();
         private readonly Dictionary<ConsoleFilter, Label> _filterCounts = new Dictionary<ConsoleFilter, Label>();
         private ConsoleFilter _activeFilter = ConsoleFilter.All;
@@ -31,18 +37,35 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>
         /// 创建日志列表视图。
         /// </summary>
-        /// <param name="list">日志列表 ScrollView（来自 UXML）。</param>
+        /// <param name="list">日志列表 ListView（来自 UXML）。</param>
         /// <param name="maxEntries">日志缓冲上限。</param>
-        public ConsoleLogList(ScrollView list, int maxEntries)
+        public ConsoleLogList(ListView list, int maxEntries)
         {
             _list = list;
             _maxEntries = maxEntries;
 
-            // 提高滚轮滚动速度（默认每次滚动太少，滚几圈才动一点）
-            _list.mouseWheelScrollSize = 120f;
+            // 2022.3 起 ListView 不再继承 ScrollView，内部组合了一个 ScrollView，需用 Q 查询拿到。
+            _scrollView = list.Q<ScrollView>();
 
-            // 让垂直滚动条变细：递归限制 scroller 内部所有元素宽度为 10px
-            ConstrainScrollbarWidth(_list.verticalScroller, 10f);
+            // 虚拟化方式：动态行高。日志消息可自动换行、堆栈可展开，行高不固定，不能使用 FixedHeight。
+            _list.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
+
+            // 日志行不需要 ListView 自带的选中态
+            _list.selectionType = SelectionType.None;
+
+            // 行模板与绑定：元素由 ListView 按需创建并复用
+            _list.makeItem = MakeItem;
+            _list.bindItem = BindItem;
+            _list.itemsSource = _viewItems;
+
+            if (_scrollView != null)
+            {
+                // 提高滚轮滚动速度（默认每次滚动太少，滚几圈才动一点）
+                _scrollView.mouseWheelScrollSize = 120f;
+
+                // 让垂直滚动条变细：递归限制 scroller 内部所有元素宽度为 10px
+                ConstrainScrollbarWidth(_scrollView.verticalScroller, 10f);
+            }
         }
 
         /// <summary>递归限制滚动条内部所有元素的宽度（USS 无法覆盖 slider 内部默认 24px，改用代码设置）。</summary>
@@ -69,44 +92,57 @@ namespace VoyageForge.Depot.Runtime.Console
             set => _forceScrollToBottom = value;
         }
 
-        /// <summary>写入一条日志到缓冲并更新计数（不重建列表）。</summary>
+        /// <summary>
+        /// 写入一条日志到缓冲与视图数据（不触发渲染，也不实例化任何 UI 元素）。
+        /// 视图数据始终与“缓冲 + 当前过滤”保持同步，供后续 <see cref="RefreshView"/> 渲染。
+        /// </summary>
         /// <param name="entry">日志条目。</param>
         public void AddLog(ConsoleLogEntry entry)
         {
             _entries.Add(entry);
 
             // 超出缓冲上限时丢弃最旧的一条，并同步扣减对应计数
+            ConsoleLogEntry removed = default;
+            bool removedAny = false;
             if (_entries.Count > _maxEntries)
             {
-                DecrementCount(_entries[0].Type);
+                removed = _entries[0];
                 _entries.RemoveAt(0);
+                removedAny = true;
+                DecrementCount(removed.Type);
             }
 
             IncrementCount(entry.Type);
+
+            // 同步视图数据（仅数据，不实例化元素）：
+            // 被丢弃的最旧条目若在当前过滤中，则它是视图中的第一条（缓冲顺序），移除之；
+            // 新条目若匹配当前过滤则追加到视图末尾。
+            if (removedAny && MatchesFilter(removed.Type) && _viewItems.Count > 0)
+            {
+                _viewItems.RemoveAt(0);
+            }
+
+            if (MatchesFilter(entry.Type))
+            {
+                _viewItems.Add(new LogRowModel { Entry = entry });
+            }
+
             UpdateFilterCounts();
         }
 
-        /// <summary>按当前过滤条件重建日志列表。</summary>
-        /// <param name="scrollToBottom">重建后是否滚动到底部（默认滚动）。</param>
-        public void RebuildList(bool scrollToBottom = true)
+        /// <summary>
+        /// 仅重新渲染可见行（视图数据已是最新、无需重新过滤时调用，例如新增一条日志）。
+        /// ListView.Rebuild 只重建“可见”行元素，复杂度为 O(可见行数) 而非 O(缓冲总数)。
+        /// </summary>
+        /// <param name="scrollToBottom">渲染后是否滚动到底部。</param>
+        public void RefreshView(bool scrollToBottom)
         {
             if (_list == null)
             {
                 return;
             }
 
-            _list.Clear();
-
-            // 按缓冲顺序（旧 -> 新）渲染，符合控制台习惯
-            foreach (ConsoleLogEntry entry in _entries)
-            {
-                if (!MatchesFilter(entry.Type))
-                {
-                    continue;
-                }
-
-                _list.Add(BuildEntryRow(entry));
-            }
+            _list.Rebuild();
 
             if (scrollToBottom)
             {
@@ -114,10 +150,24 @@ namespace VoyageForge.Depot.Runtime.Console
             }
         }
 
-        /// <summary>清空日志缓冲与计数。</summary>
+        /// <summary>按当前过滤条件重新构建视图数据并渲染（过滤切换、显示面板、清空时调用）。</summary>
+        /// <param name="scrollToBottom">渲染后是否滚动到底部（默认滚动）。</param>
+        public void RebuildList(bool scrollToBottom = true)
+        {
+            if (_list == null)
+            {
+                return;
+            }
+
+            RebuildViewItems();
+            RefreshView(scrollToBottom);
+        }
+
+        /// <summary>清空日志缓冲、视图数据与计数。</summary>
         public void Clear()
         {
             _entries.Clear();
+            _viewItems.Clear();
             _countLog = 0;
             _countWarning = 0;
             _countError = 0;
@@ -128,12 +178,12 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <returns>是否在底部。</returns>
         public bool IsAtBottom()
         {
-            if (_list == null)
+            if (_scrollView == null)
             {
                 return false;
             }
 
-            Scroller scroller = _list.verticalScroller;
+            Scroller scroller = _scrollView.verticalScroller;
             if (scroller == null)
             {
                 return true;
@@ -163,7 +213,7 @@ namespace VoyageForge.Depot.Runtime.Console
                 _filterCounts[filter] = count;
             }
 
-            // 点击后切换激活过滤类型并刷新列表
+            // 点击后切换激活过滤类型并重建视图数据 + 渲染
             button.RegisterCallback<ClickEvent>(_ =>
             {
                 _activeFilter = filter;
@@ -209,14 +259,25 @@ namespace VoyageForge.Depot.Runtime.Console
         // 私有辅助
         // ---------------------------------------------------------------
 
-        /// <summary>根据日志条目构建一行 UI：圆点 + 箭头 + 时间戳 + 消息，有堆栈时附可展开的堆栈块。</summary>
-        private VisualElement BuildEntryRow(ConsoleLogEntry entry)
+        /// <summary>按当前过滤条件，从完整缓冲重建视图数据（元素展开状态会重置）。</summary>
+        private void RebuildViewItems()
+        {
+            _viewItems.Clear();
+
+            foreach (ConsoleLogEntry entry in _entries)
+            {
+                if (MatchesFilter(entry.Type))
+                {
+                    _viewItems.Add(new LogRowModel { Entry = entry });
+                }
+            }
+        }
+
+        /// <summary>创建一行日志的 UI 模板（圆点 + 箭头 + 时间戳 + 消息 + 可展开堆栈）。由 ListView 按需调用。</summary>
+        private VisualElement MakeItem()
         {
             VisualElement row = new VisualElement();
             row.AddToClassList("console-entry");
-            row.AddToClassList(GetEntryClass(entry.Type));
-
-            bool hasStack = !string.IsNullOrEmpty(entry.StackTrace);
 
             VisualElement line = new VisualElement();
             line.AddToClassList("console-entry-line");
@@ -225,44 +286,82 @@ namespace VoyageForge.Depot.Runtime.Console
             dot.AddToClassList("console-entry-dot");
             line.Add(dot);
 
-            Label caret = new Label(hasStack ? "▸" : string.Empty);
+            Label caret = new Label();
             caret.AddToClassList("console-entry-caret");
             line.Add(caret);
 
-            Label timestamp = new Label(entry.Timestamp);
+            Label timestamp = new Label();
             timestamp.AddToClassList("console-entry-ts");
             line.Add(timestamp);
 
-            Label message = new Label(entry.Message);
+            Label message = new Label();
             message.AddToClassList("console-entry-msg");
             line.Add(message);
 
+            Label stack = new Label();
+            stack.AddToClassList("console-entry-stack");
+            stack.style.display = DisplayStyle.None;
+
             row.Add(line);
+            row.Add(stack);
 
-            if (hasStack)
+            // 缓存子元素引用，避免 bindItem 里反复 Q 查询
+            EntryRowRefs refs = new EntryRowRefs
             {
-                Label trace = new Label(entry.StackTrace);
-                trace.AddToClassList("console-entry-stack");
-                trace.style.display = DisplayStyle.None;
-                row.Add(trace);
+                Line = line,
+                Caret = caret,
+                Timestamp = timestamp,
+                Message = message,
+                Stack = stack
+            };
+            row.userData = refs;
 
-                line.RegisterCallback<ClickEvent>(evt =>
+            // 点击整行切换堆栈展开/折叠（展开状态存在行模型上，元素复用后仍能还原）
+            line.RegisterCallback<ClickEvent>(evt =>
+            {
+                evt.StopPropagation();
+
+                if (refs.Model == null)
                 {
-                    evt.StopPropagation();
+                    return;
+                }
 
-                    bool wasAtBottom = IsAtBottom();
-                    bool expanded = trace.style.display != DisplayStyle.None;
-                    trace.style.display = expanded ? DisplayStyle.None : DisplayStyle.Flex;
-                    caret.text = expanded ? "▸" : "▾";
+                bool wasAtBottom = IsAtBottom();
+                refs.Model.IsExpanded = !refs.Model.IsExpanded;
 
-                    if (wasAtBottom)
-                    {
-                        ScrollToBottom();
-                    }
-                });
-            }
+                // 行高变化（堆栈展开/收起），Rebuild 重建可见行并重测高度
+                _list.Rebuild();
+
+                if (wasAtBottom)
+                {
+                    ScrollToBottom();
+                }
+            });
 
             return row;
+        }
+
+        /// <summary>把数据（行模型）绑定到复用出来的行元素上。由 ListView 在渲染可见行时调用。</summary>
+        /// <param name="element">makeItem 返回的行元素。</param>
+        /// <param name="index">在视图数据中的索引。</param>
+        private void BindItem(VisualElement element, int index)
+        {
+            EntryRowRefs refs = (EntryRowRefs)element.userData;
+            refs.Model = _viewItems[index];
+            ConsoleLogEntry entry = refs.Model.Entry;
+
+            // 更新级别样式类（控制圆点与消息文字颜色）
+            element.RemoveFromClassList("console-entry-log");
+            element.RemoveFromClassList("console-entry-warning");
+            element.RemoveFromClassList("console-entry-error");
+            element.AddToClassList(GetEntryClass(entry.Type));
+
+            bool hasStack = !string.IsNullOrEmpty(entry.StackTrace);
+            refs.Caret.text = hasStack ? (refs.Model.IsExpanded ? "▾" : "▸") : string.Empty;
+            refs.Timestamp.text = entry.Timestamp;
+            refs.Message.text = entry.Message;
+            refs.Stack.text = entry.StackTrace;
+            refs.Stack.style.display = hasStack && refs.Model.IsExpanded ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         /// <summary>判断某条日志是否匹配当前激活的过滤类型。</summary>
@@ -300,22 +399,22 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>把日志列表滚动到底部（延迟到布局完成后执行）。</summary>
         private void ScrollToBottom()
         {
-            if (_list == null)
+            if (_scrollView == null)
             {
                 return;
             }
 
-            _list.schedule.Execute(() =>
+            _scrollView.schedule.Execute(() =>
             {
                 ScrollToBottomNow();
-                _list.schedule.Execute(ScrollToBottomNow);
+                _scrollView.schedule.Execute(ScrollToBottomNow);
             });
         }
 
         /// <summary>立即把日志列表滚动到底部（供延迟调度调用）。</summary>
         private void ScrollToBottomNow()
         {
-            Scroller scroller = _list.verticalScroller;
+            Scroller scroller = _scrollView.verticalScroller;
             if (scroller != null)
             {
                 scroller.value = scroller.highValue;
@@ -360,6 +459,32 @@ namespace VoyageForge.Depot.Runtime.Console
         private static bool IsErrorType(LogType type)
         {
             return type == LogType.Error || type == LogType.Assert || type == LogType.Exception;
+        }
+
+        /// <summary>
+        /// 列表行模型：在 <see cref="ConsoleLogEntry"/> 之外额外承载“堆栈是否展开”状态。
+        /// 行元素会被 ListView 回收复用，展开状态必须存在数据侧而非元素侧，否则复用后状态错乱。
+        /// </summary>
+        private sealed class LogRowModel
+        {
+            /// <summary>日志条目数据。</summary>
+            public ConsoleLogEntry Entry;
+
+            /// <summary>该行堆栈当前是否展开。</summary>
+            public bool IsExpanded;
+        }
+
+        /// <summary>一行日志元素的子元素引用缓存，避免 bindItem 反复 Q 查询。</summary>
+        private sealed class EntryRowRefs
+        {
+            public VisualElement Line;
+            public Label Caret;
+            public Label Timestamp;
+            public Label Message;
+            public Label Stack;
+
+            /// <summary>当前绑定的行模型（bindItem 中赋值，点击展开时读取）。</summary>
+            public LogRowModel Model;
         }
     }
 }

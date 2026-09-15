@@ -29,7 +29,7 @@
                     <ui:Label text="0" class="console-filter-count" />
                 </ui:VisualElement>
             </ui:VisualElement>
-            <ui:ScrollView name="console-list" class="console-list" />
+            <ui:ListView name="console-list" class="console-list" />
             <ui:VisualElement name="console-command-bar" class="console-command-bar">
                 <ui:Label text="›" class="console-command-prompt" />
                 <ui:TextField name="console-command-input" class="console-command-input" />
