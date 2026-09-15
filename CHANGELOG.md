@@ -2,6 +2,18 @@
 
 本文件由开发者手动维护，发布流程不会自动生成或修改此文件。
 
+## v0.0.24
+
+### Added
+- 新增 `Runtime Console Font` 样本（`Samples~/Font`）：Noto Sans SC 字体资源（源字体、字符集与生成的 SDF 字体资产），供 `Runtime Console Sample` 渲染中文。
+
+### Changed
+- 字体资源目录重构：源字体 `.otf` 与字符集 `3500+symbols.txt` 从 Console 样本的 Resources 移至独立 `Samples~/Font`，生成的 SDF 字体资产放于 `Samples~/Font/Resources/Depot/Font`；Console 样本仅保留 `UITK Text Settings`。
+- `RuntimeConsole` 日志监听时机调整：从 `OnEnable` 改为初始化完成后立即监听，组件被禁用/重新启用期间仍持续捕获日志。
+
+### Fixed
+- 控制台隐藏时不再实例化日志列表 item：日志仅写入缓冲，待显示时统一重建，减少后台无谓的 UI 元素创建。
+
 ## v0.0.23
 
 ### Changed
