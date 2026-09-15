@@ -15,6 +15,9 @@
 ### Fixed
 - 控制台隐藏时不再实例化日志列表 item：日志仅写入缓冲，待显示时统一重建，减少后台无谓的 UI 元素创建。
 
+### Removed
+- 移除 FileBrowser（迁移至 `feature/file-browser` 分支）。
+
 ## v0.0.23
 
 ### Changed
