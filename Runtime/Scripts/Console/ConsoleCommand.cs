@@ -57,5 +57,17 @@ namespace VoyageForge.Depot.Runtime.Console
         {
             return Array.Empty<string>();
         }
+
+        /// <summary>
+        /// 命令注册成功后调用（主线程）。
+        /// 派生类可重写以订阅事件、初始化状态等（例如 listen 命令在此订阅 Unity 日志回调）。
+        /// </summary>
+        public virtual void OnCreate() { }
+
+        /// <summary>
+        /// 命令被移除（清空命令表）时调用（主线程）。
+        /// 派生类可重写以清理资源、取消订阅等（例如 listen 命令在此取消订阅日志回调）。
+        /// </summary>
+        public virtual void OnDestroy() { }
     }
 }

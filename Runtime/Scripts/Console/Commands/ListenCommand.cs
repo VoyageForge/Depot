@@ -6,12 +6,15 @@ using UnityEngine.Scripting;
 namespace VoyageForge.Depot.Runtime.Console
 {
     /// <summary>
-    /// 内置命令：listen —— 控制日志监听开关与自启动设置。
+    /// 内置命令：listen —— 监听 Unity 日志并决定是否转发到 RuntimeConsole。
     ///
-    /// 职责说明：
-    /// 日志桥接（订阅 Application.logMessageReceived 把 Unity 日志转发到 RuntimeConsole）的
-    /// 开关状态与 PlayerPrefs 持久化都收敛在本命令中，主类 <see cref="RuntimeConsole"/> 只提供
-    /// 底层机制 <see cref="RuntimeConsole.SetLogListening"/>，避免污染主类。
+    /// 职责：
+    /// 本命令独占「Unity 日志 → RuntimeConsole」的桥接职责：自己订阅 Application.logMessageReceived，
+    /// 把日志转发给 RuntimeConsole.WriteLogEntry；开关状态与自启动设置持久化在 PlayerPrefs。
+    ///
+    /// 生命周期：
+    /// - <see cref="OnCreate"/>：命令注册成功后（主线程）按自启动设置决定是否开始监听；
+    /// - <see cref="OnDestroy"/>：命令被移除时（主线程）取消监听。
     ///
     /// 用法：
     ///   listen                        查看当前监听状态与自启动状态；
@@ -27,6 +30,9 @@ namespace VoyageForge.Depot.Runtime.Console
         private const string ListenLogsPrefKey = "Depot.Console.ListenLogs";
         private const string AutoStartListeningPrefKey = "Depot.Console.AutoStartListening";
 
+        /// <summary>当前是否已订阅 Unity 日志回调（实例状态，不复用静态字段）。</summary>
+        private bool _listening;
+
         /// <inheritdoc />
         public override string Name => "listen";
 
@@ -38,32 +44,26 @@ namespace VoyageForge.Depot.Runtime.Console
 
         /// <summary>
         /// 是否自启动监听（持久化到 PlayerPrefs）。
-        /// 开启后，RuntimeConsole 初始化时会自动开始监听 Unity 日志。
+        /// 开启后，本命令注册成功时（主线程）会自动开始监听 Unity 日志。
         /// </summary>
-        public static bool AutoStartListening
+        private bool AutoStartListening
         {
             get => PlayerPrefs.GetInt(AutoStartListeningPrefKey, 0) == 1;
             set => PlayerPrefs.SetInt(AutoStartListeningPrefKey, value ? 1 : 0);
         }
 
-        /// <summary>
-        /// 设置日志监听开关并持久化（供 listen on/off 命令调用）。
-        /// </summary>
-        /// <param name="listen">true 开始监听；false 停止监听。</param>
-        public static void SetListening(bool listen)
+        /// <summary>命令注册成功后调用（主线程）：按自启动设置决定是否开始监听。</summary>
+        public override void OnCreate()
         {
-            PlayerPrefs.SetInt(ListenLogsPrefKey, listen ? 1 : 0);
-            RuntimeConsole.SetLogListening(listen);
+            // 自启动开启 → 强制监听；关闭 → 按持久化的“是否监听”恢复上次状态
+            bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 0) == 1;
+            SetListening(listen, persist: false);
         }
 
-        /// <summary>
-        /// 按持久化的自启动/监听设置，应用日志监听状态。
-        /// 由 <see cref="RuntimeConsole"/> 初始化完成后调用。
-        /// </summary>
-        public static void ApplyAutoStart()
+        /// <summary>命令被移除时调用（主线程）：取消监听，避免订阅泄漏。</summary>
+        public override void OnDestroy()
         {
-            bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 0) == 1;
-            RuntimeConsole.SetLogListening(listen);
+            SetListening(false, persist: false);
         }
 
         /// <summary>
@@ -77,19 +77,19 @@ namespace VoyageForge.Depot.Runtime.Console
             if (args.Length == 0)
             {
                 RuntimeConsole.WriteDirect(
-                    $"[Console] 日志监听：{(RuntimeConsole.IsListening ? "开启" : "关闭")}，自启动：{(AutoStartListening ? "开启" : "关闭")}");
+                    $"[Console] 日志监听：{(_listening ? "开启" : "关闭")}，自启动：{(AutoStartListening ? "开启" : "关闭")}");
                 return;
             }
 
             switch (args[0].ToLowerInvariant())
             {
                 case "on":
-                    SetListening(true);
+                    SetListening(true, persist: true);
                     RuntimeConsole.WriteDirect("[Console] 日志监听已开启。");
                     break;
 
                 case "off":
-                    SetListening(false);
+                    SetListening(false, persist: true);
                     RuntimeConsole.WriteDirect("[Console] 日志监听已关闭。");
                     break;
 
@@ -103,9 +103,49 @@ namespace VoyageForge.Depot.Runtime.Console
             }
         }
 
+        /// <summary>设置监听状态（幂等），并按需持久化。</summary>
+        /// <param name="listen">true 开始监听；false 停止监听。</param>
+        /// <param name="persist">是否把“是否监听”写入 PlayerPrefs。</param>
+        private void SetListening(bool listen, bool persist)
+        {
+            if (persist)
+            {
+                PlayerPrefs.SetInt(ListenLogsPrefKey, listen ? 1 : 0);
+            }
+
+            if (_listening == listen)
+            {
+                return;
+            }
+
+            _listening = listen;
+
+            if (listen)
+            {
+                Application.logMessageReceived += HandleUnityLog;
+            }
+            else
+            {
+                Application.logMessageReceived -= HandleUnityLog;
+            }
+        }
+
+        /// <summary>Unity 日志回调：把日志转发到 RuntimeConsole（决定是否打印到控制台）。</summary>
+        /// <param name="condition">日志正文。</param>
+        /// <param name="stackTrace">调用堆栈。</param>
+        /// <param name="type">日志类型。</param>
+        private void HandleUnityLog(string condition, string stackTrace, LogType type)
+        {
+            // 仅当 RuntimeConsole 单例存在时转发
+            if (RuntimeConsole.HasInstance)
+            {
+                RuntimeConsole.Instance.WriteLogEntry(condition, stackTrace, type);
+            }
+        }
+
         /// <summary>处理 autostart 子命令：切换自启动开关（只持久化，不影响当前会话）。</summary>
         /// <param name="args">命令参数（args[0] 为 "autostart"）。</param>
-        private static void HandleAutoStart(string[] args)
+        private void HandleAutoStart(string[] args)
         {
             // 缺少第二个参数：显示自启动状态
             if (args.Length < 2)

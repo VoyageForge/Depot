@@ -99,6 +99,9 @@ namespace VoyageForge.Depot.Runtime.Console
 
                 Commands[command.Name] = command;
                 registered++;
+
+                // 注册成功后触发创建生命周期（主线程）：命令可在此订阅事件、初始化状态
+                command.OnCreate();
             }
 
             return registered;
@@ -107,6 +110,12 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>清空命令表（主要用于测试隔离，或运行时需要重置注册状态时）。</summary>
         public static void Clear()
         {
+            // 触发销毁生命周期（主线程）：命令可在此清理资源、取消订阅
+            foreach (ConsoleCommand command in Commands.Values)
+            {
+                command.OnDestroy();
+            }
+
             Commands.Clear();
         }
 

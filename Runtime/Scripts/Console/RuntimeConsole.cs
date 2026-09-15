@@ -73,9 +73,6 @@ namespace VoyageForge.Depot.Runtime.Console
 
         private static PanelTextSettings _customTextSettings;  // 用户自定义的文本设置（如中文字体）
 
-        /// <summary>当前是否正在监听 Unity 日志（已订阅 logMessageReceived）。</summary>
-        private bool _listening;
-
         // ---------------------------------------------------------------
         // 拖拽状态
         // ---------------------------------------------------------------
@@ -132,47 +129,6 @@ namespace VoyageForge.Depot.Runtime.Console
             _customTextSettings = textSettings;
         }
 
-        // ---------------------------------------------------------------
-        // 日志监听桥接（订阅 / 取消订阅 Unity 日志回调）
-        // ---------------------------------------------------------------
-
-        /// <summary>当前单例是否正在监听日志（无实例时返回 false）。</summary>
-        public static bool IsListening => HasInstance && Instance._listening;
-
-        /// <summary>
-        /// 设置是否监听 Unity 日志（底层桥接机制，不持久化）。
-        /// 桥接开关与持久化由 <see cref="ListenCommand"/> 负责。
-        /// </summary>
-        /// <param name="listen">true 开始监听；false 停止监听。</param>
-        public static void SetLogListening(bool listen)
-        {
-            if (HasInstance)
-            {
-                Instance.ApplyLogListening(listen);
-            }
-        }
-
-        /// <summary>订阅或取消订阅 Unity 日志回调（幂等）。</summary>
-        /// <param name="listen">true 订阅；false 取消订阅。</param>
-        private void ApplyLogListening(bool listen)
-        {
-            if (_listening == listen)
-            {
-                return;
-            }
-
-            _listening = listen;
-
-            if (listen)
-            {
-                Application.logMessageReceived += HandleLog;
-            }
-            else
-            {
-                Application.logMessageReceived -= HandleLog;
-            }
-        }
-
         /// <summary>
         /// 直接向控制台写入一条日志（绕过 logMessageReceived）。
         /// 用于监听关闭时仍能显示命令输出（例如 listen 命令的状态提示）。
@@ -183,7 +139,7 @@ namespace VoyageForge.Depot.Runtime.Console
         {
             if (HasInstance)
             {
-                Instance.HandleLog(message, string.Empty, type);
+                Instance.WriteLogEntry(message, string.Empty, type);
             }
         }
 
@@ -244,7 +200,7 @@ namespace VoyageForge.Depot.Runtime.Console
             // 播放模式：直接写入 RuntimeConsole 缓冲（不经过 logMessageReceived）
             if (HasInstance)
             {
-                Instance.HandleLog(text, stack, type);
+                Instance.WriteLogEntry(text, stack, type);
             }
         }
 
@@ -288,15 +244,14 @@ namespace VoyageForge.Depot.Runtime.Console
         // 生命周期（继承自 MonoSingleton）
         // ---------------------------------------------------------------
 
-        /// <summary>MonoSingleton 初始化回调：构建面板、启动后台扫描命令，并按自启动设置决定是否开始监听日志。</summary>
+        /// <summary>MonoSingleton 初始化回调：构建面板、启动后台扫描命令。</summary>
         protected override void OnInitialize()
         {
             BuildPanel();
             StartCommandScan();
 
-            // 日志监听桥接的自启动由 ListenCommand 统一处理（读取 PlayerPrefs 并应用）
-            ListenCommand.ApplyAutoStart();
-
+            // 命令在后台扫描完成后由 RegisterAll 统一触发 OnCreate（主线程），
+            // 日志监听桥接的自启动由 ListenCommand.OnCreate 处理，这里不直接引用具体命令。
             OnConsoleInitialized();
         }
 
@@ -309,10 +264,10 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>每收到一条日志时调用（在写入缓冲之后）。派生类可重写。</summary>
         protected virtual void OnLogReceived(ConsoleLogEntry entry) { }
 
-        /// <summary>销毁时移除日志监听（若仍在监听）。</summary>
+        /// <summary>销毁时清理命令注册表，触发命令的销毁生命周期（如 listen 命令取消日志订阅）。</summary>
         protected override void OnDestroying()
         {
-            ApplyLogListening(false);
+            ConsoleCommandRegistry.Clear();
         }
 
         private void Update()
@@ -487,8 +442,8 @@ namespace VoyageForge.Depot.Runtime.Console
         // 日志处理
         // ---------------------------------------------------------------
 
-        /// <summary>Unity 日志回调：封装条目写入缓冲，并通知外部与派生类。</summary>
-        private void HandleLog(string condition, string stackTrace, LogType type)
+        /// <summary>把一条日志写入缓冲并渲染（供 Log/Warning/Error、WriteDirect 与 ListenCommand 桥接共用）。</summary>
+        public void WriteLogEntry(string condition, string stackTrace, LogType type)
         {
             ConsoleLogEntry entry = new ConsoleLogEntry(
                 condition,

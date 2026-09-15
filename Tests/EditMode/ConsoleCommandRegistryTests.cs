@@ -203,7 +203,7 @@ namespace VoyageForge.Depot.Tests
             Assert.IsEmpty(command.GetArgumentCompletions(new[] { "alice", "admin" }, string.Empty));
         }
 
-        // ---- 日志监听开关（ListenCommand + RuntimeConsole 静态接口）----
+        // ---- 日志监听开关（ListenCommand，通过命令生命周期处理）----
 
         /// <summary>listen 命令的参数补全：第一个参数提示 on / off / autostart。</summary>
         [Test]
@@ -232,6 +232,7 @@ namespace VoyageForge.Depot.Tests
         public void ListenCommand_Execute_on_开启监听并持久化()
         {
             ListenCommand command = new ListenCommand();
+            ConsoleCommandRegistry.RegisterAll(new[] { command });  // 注册以接入生命周期，便于 TearDown 清理订阅
 
             command.Execute(new[] { "on" });
 
@@ -243,6 +244,7 @@ namespace VoyageForge.Depot.Tests
         public void ListenCommand_Execute_off_关闭监听并持久化()
         {
             ListenCommand command = new ListenCommand();
+            ConsoleCommandRegistry.RegisterAll(new[] { command });
 
             command.Execute(new[] { "off" });
 
@@ -254,32 +256,23 @@ namespace VoyageForge.Depot.Tests
         public void ListenCommand_Execute_autostart_off_关闭自启动并持久化()
         {
             ListenCommand command = new ListenCommand();
+            ConsoleCommandRegistry.RegisterAll(new[] { command });
 
             command.Execute(new[] { "autostart", "off" });
 
             Assert.AreEqual(0, PlayerPrefs.GetInt("Depot.Console.AutoStartListening", -1));
         }
 
-        /// <summary>ListenCommand.SetListening 应把“是否监听”写入 PlayerPrefs。</summary>
+        /// <summary>listen autostart on：应把“自启动”持久化为开启。</summary>
         [Test]
-        public void SetListening_写入PlayerPrefs()
+        public void ListenCommand_Execute_autostart_on_开启自启动并持久化()
         {
-            ListenCommand.SetListening(false);
-            Assert.AreEqual(0, PlayerPrefs.GetInt("Depot.Console.ListenLogs", -1));
+            ListenCommand command = new ListenCommand();
+            ConsoleCommandRegistry.RegisterAll(new[] { command });
 
-            ListenCommand.SetListening(true);
-            Assert.AreEqual(1, PlayerPrefs.GetInt("Depot.Console.ListenLogs", -1));
-        }
+            command.Execute(new[] { "autostart", "on" });
 
-        /// <summary>ListenCommand.AutoStartListening 应通过 PlayerPrefs 读写自启动开关。</summary>
-        [Test]
-        public void AutoStartListening_读写PlayerPrefs()
-        {
-            ListenCommand.AutoStartListening = false;
-            Assert.IsFalse(ListenCommand.AutoStartListening);
-
-            ListenCommand.AutoStartListening = true;
-            Assert.IsTrue(ListenCommand.AutoStartListening);
+            Assert.AreEqual(1, PlayerPrefs.GetInt("Depot.Console.AutoStartListening", -1));
         }
 
         /// <summary>
