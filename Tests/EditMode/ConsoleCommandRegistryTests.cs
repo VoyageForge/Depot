@@ -260,26 +260,26 @@ namespace VoyageForge.Depot.Tests
             Assert.AreEqual(0, PlayerPrefs.GetInt("Depot.Console.AutoStartListening", -1));
         }
 
-        /// <summary>RuntimeConsole.SetListening 应把“是否监听”写入 PlayerPrefs。</summary>
+        /// <summary>ListenCommand.SetListening 应把“是否监听”写入 PlayerPrefs。</summary>
         [Test]
         public void SetListening_写入PlayerPrefs()
         {
-            RuntimeConsole.SetListening(false);
+            ListenCommand.SetListening(false);
             Assert.AreEqual(0, PlayerPrefs.GetInt("Depot.Console.ListenLogs", -1));
 
-            RuntimeConsole.SetListening(true);
+            ListenCommand.SetListening(true);
             Assert.AreEqual(1, PlayerPrefs.GetInt("Depot.Console.ListenLogs", -1));
         }
 
-        /// <summary>RuntimeConsole.AutoStartListening 应通过 PlayerPrefs 读写自启动开关。</summary>
+        /// <summary>ListenCommand.AutoStartListening 应通过 PlayerPrefs 读写自启动开关。</summary>
         [Test]
         public void AutoStartListening_读写PlayerPrefs()
         {
-            RuntimeConsole.AutoStartListening = false;
-            Assert.IsFalse(RuntimeConsole.AutoStartListening);
+            ListenCommand.AutoStartListening = false;
+            Assert.IsFalse(ListenCommand.AutoStartListening);
 
-            RuntimeConsole.AutoStartListening = true;
-            Assert.IsTrue(RuntimeConsole.AutoStartListening);
+            ListenCommand.AutoStartListening = true;
+            Assert.IsTrue(ListenCommand.AutoStartListening);
         }
 
         /// <summary>

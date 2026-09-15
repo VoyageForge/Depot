@@ -25,10 +25,6 @@ namespace VoyageForge.Depot.Runtime.Console
         private const string UssResourcePath = "Depot/Console/RuntimeConsole";
         private const string PanelSettingsResourcePath = "Depot/Console/RuntimeConsole";
 
-        // PlayerPrefs 键：日志监听开关与自启动开关（持久化到本地）
-        private const string ListenLogsPrefKey = "Depot.Console.ListenLogs";
-        private const string AutoStartListeningPrefKey = "Depot.Console.AutoStartListening";
-
         // ---------------------------------------------------------------
         // 可配置字段（Inspector 中可见）
         // ---------------------------------------------------------------
@@ -137,35 +133,43 @@ namespace VoyageForge.Depot.Runtime.Console
         }
 
         // ---------------------------------------------------------------
-        // 日志监听开关（可持久化）
+        // 日志监听桥接（订阅 / 取消订阅 Unity 日志回调）
         // ---------------------------------------------------------------
 
         /// <summary>当前单例是否正在监听日志（无实例时返回 false）。</summary>
         public static bool IsListening => HasInstance && Instance._listening;
 
         /// <summary>
-        /// 是否自启动监听（持久化到 PlayerPrefs）。
-        /// 开启后，RuntimeConsole 初始化时会自动开始监听日志。
-        /// </summary>
-        public static bool AutoStartListening
-        {
-            // 默认不自动监听：改为通过 listen on / listen autostart on 显式开启
-            get => PlayerPrefs.GetInt(AutoStartListeningPrefKey, 0) == 1;
-            set => PlayerPrefs.SetInt(AutoStartListeningPrefKey, value ? 1 : 0);
-        }
-
-        /// <summary>
-        /// 设置日志监听开关并持久化（供 listen on/off 命令调用）。
-        /// 若单例已存在会立即生效，否则仅写入 PlayerPrefs（下次初始化时生效）。
+        /// 设置是否监听 Unity 日志（底层桥接机制，不持久化）。
+        /// 桥接开关与持久化由 <see cref="ListenCommand"/> 负责。
         /// </summary>
         /// <param name="listen">true 开始监听；false 停止监听。</param>
-        public static void SetListening(bool listen)
+        public static void SetLogListening(bool listen)
         {
-            PlayerPrefs.SetInt(ListenLogsPrefKey, listen ? 1 : 0);
-
             if (HasInstance)
             {
-                Instance.ApplyListening(listen);
+                Instance.ApplyLogListening(listen);
+            }
+        }
+
+        /// <summary>订阅或取消订阅 Unity 日志回调（幂等）。</summary>
+        /// <param name="listen">true 订阅；false 取消订阅。</param>
+        private void ApplyLogListening(bool listen)
+        {
+            if (_listening == listen)
+            {
+                return;
+            }
+
+            _listening = listen;
+
+            if (listen)
+            {
+                Application.logMessageReceived += HandleLog;
+            }
+            else
+            {
+                Application.logMessageReceived -= HandleLog;
             }
         }
 
@@ -187,14 +191,10 @@ namespace VoyageForge.Depot.Runtime.Console
         // 直接日志输出（RuntimeConsole.Log / Warning / Error）
         // ---------------------------------------------------------------
 
-        /// <summary>编辑器里把日志转接 Debug.Log 时，抑制桥接监听重复捕获该条日志。</summary>
-        private static bool _suppressBridgeCapture;
-
         /// <summary>
         /// 输出普通日志。
         /// 编辑器非播放模式：仅打印到 Unity 控制台；
-        /// 编辑器播放模式：写入 RuntimeConsole 缓冲，同时打印到 Unity 控制台；
-        /// 构建（运行时）：仅写入 RuntimeConsole 缓冲。
+        /// 编辑器播放模式与构建（运行时）：仅写入 RuntimeConsole 缓冲。
         /// </summary>
         /// <param name="message">日志内容（任意对象，等价于 Debug.Log(object)）。</param>
         public static void Log(object message,
@@ -246,14 +246,6 @@ namespace VoyageForge.Depot.Runtime.Console
             {
                 Instance.HandleLog(text, stack, type);
             }
-
-            // 编辑器播放模式：同时打印到 Unity 控制台（抑制桥接监听重复捕获）
-            if (Application.isEditor)
-            {
-                _suppressBridgeCapture = true;
-                UnityLog(type, WithCallerLocation(text, filePath, lineNumber));
-                _suppressBridgeCapture = false;
-            }
         }
 
         /// <summary>按日志类型调用对应的 Unity Debug 输出。</summary>
@@ -292,27 +284,6 @@ namespace VoyageForge.Depot.Runtime.Console
             return $"[{fileName}:{lineNumber}] {text}";
         }
 
-        /// <summary>订阅或取消订阅 Unity 日志回调（幂等）。</summary>
-        /// <param name="listen">true 订阅；false 取消订阅。</param>
-        private void ApplyListening(bool listen)
-        {
-            if (_listening == listen)
-            {
-                return;
-            }
-
-            _listening = listen;
-
-            if (listen)
-            {
-                Application.logMessageReceived += HandleLog;
-            }
-            else
-            {
-                Application.logMessageReceived -= HandleLog;
-            }
-        }
-
         // ---------------------------------------------------------------
         // 生命周期（继承自 MonoSingleton）
         // ---------------------------------------------------------------
@@ -323,10 +294,8 @@ namespace VoyageForge.Depot.Runtime.Console
             BuildPanel();
             StartCommandScan();
 
-            // 日志监听：默认不监听；自启动开启时初始化即开始监听；关闭时按持久化的“是否监听”恢复上次状态。
-            // 自启动由 listen autostart on/off 命令控制，“是否监听”由 listen on/off 控制，均持久化在 PlayerPrefs。
-            bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 0) == 1;
-            ApplyListening(listen);
+            // 日志监听桥接的自启动由 ListenCommand 统一处理（读取 PlayerPrefs 并应用）
+            ListenCommand.ApplyAutoStart();
 
             OnConsoleInitialized();
         }
@@ -343,7 +312,7 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>销毁时移除日志监听（若仍在监听）。</summary>
         protected override void OnDestroying()
         {
-            ApplyListening(false);
+            ApplyLogListening(false);
         }
 
         private void Update()
@@ -521,12 +490,6 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>Unity 日志回调：封装条目写入缓冲，并通知外部与派生类。</summary>
         private void HandleLog(string condition, string stackTrace, LogType type)
         {
-            // 编辑器里 RuntimeConsole.Log 转接 Debug.Log 时，跳过桥接监听的重复捕获
-            if (_suppressBridgeCapture)
-            {
-                return;
-            }
-
             ConsoleLogEntry entry = new ConsoleLogEntry(
                 condition,
                 stackTrace,

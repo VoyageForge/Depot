@@ -8,6 +8,11 @@ namespace VoyageForge.Depot.Runtime.Console
     /// <summary>
     /// 内置命令：listen —— 控制日志监听开关与自启动设置。
     ///
+    /// 职责说明：
+    /// 日志桥接（订阅 Application.logMessageReceived 把 Unity 日志转发到 RuntimeConsole）的
+    /// 开关状态与 PlayerPrefs 持久化都收敛在本命令中，主类 <see cref="RuntimeConsole"/> 只提供
+    /// 底层机制 <see cref="RuntimeConsole.SetLogListening"/>，避免污染主类。
+    ///
     /// 用法：
     ///   listen                        查看当前监听状态与自启动状态；
     ///   listen on / off               开启 / 关闭日志监听（持久化到 PlayerPrefs）；
@@ -18,6 +23,10 @@ namespace VoyageForge.Depot.Runtime.Console
     [Preserve]
     public sealed class ListenCommand : ConsoleCommand
     {
+        // PlayerPrefs 键：日志监听开关与自启动开关
+        private const string ListenLogsPrefKey = "Depot.Console.ListenLogs";
+        private const string AutoStartListeningPrefKey = "Depot.Console.AutoStartListening";
+
         /// <inheritdoc />
         public override string Name => "listen";
 
@@ -26,6 +35,36 @@ namespace VoyageForge.Depot.Runtime.Console
 
         /// <inheritdoc />
         public override string Usage => "listen [on|off|autostart on|autostart off]";
+
+        /// <summary>
+        /// 是否自启动监听（持久化到 PlayerPrefs）。
+        /// 开启后，RuntimeConsole 初始化时会自动开始监听 Unity 日志。
+        /// </summary>
+        public static bool AutoStartListening
+        {
+            get => PlayerPrefs.GetInt(AutoStartListeningPrefKey, 0) == 1;
+            set => PlayerPrefs.SetInt(AutoStartListeningPrefKey, value ? 1 : 0);
+        }
+
+        /// <summary>
+        /// 设置日志监听开关并持久化（供 listen on/off 命令调用）。
+        /// </summary>
+        /// <param name="listen">true 开始监听；false 停止监听。</param>
+        public static void SetListening(bool listen)
+        {
+            PlayerPrefs.SetInt(ListenLogsPrefKey, listen ? 1 : 0);
+            RuntimeConsole.SetLogListening(listen);
+        }
+
+        /// <summary>
+        /// 按持久化的自启动/监听设置，应用日志监听状态。
+        /// 由 <see cref="RuntimeConsole"/> 初始化完成后调用。
+        /// </summary>
+        public static void ApplyAutoStart()
+        {
+            bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 0) == 1;
+            RuntimeConsole.SetLogListening(listen);
+        }
 
         /// <summary>
         /// 执行命令：无参数显示状态；on/off 切换监听；autostart on/off 切换自启动。
@@ -38,19 +77,19 @@ namespace VoyageForge.Depot.Runtime.Console
             if (args.Length == 0)
             {
                 RuntimeConsole.WriteDirect(
-                    $"[Console] 日志监听：{(RuntimeConsole.IsListening ? "开启" : "关闭")}，自启动：{(RuntimeConsole.AutoStartListening ? "开启" : "关闭")}");
+                    $"[Console] 日志监听：{(RuntimeConsole.IsListening ? "开启" : "关闭")}，自启动：{(AutoStartListening ? "开启" : "关闭")}");
                 return;
             }
 
             switch (args[0].ToLowerInvariant())
             {
                 case "on":
-                    RuntimeConsole.SetListening(true);
+                    SetListening(true);
                     RuntimeConsole.WriteDirect("[Console] 日志监听已开启。");
                     break;
 
                 case "off":
-                    RuntimeConsole.SetListening(false);
+                    SetListening(false);
                     RuntimeConsole.WriteDirect("[Console] 日志监听已关闭。");
                     break;
 
@@ -71,19 +110,19 @@ namespace VoyageForge.Depot.Runtime.Console
             // 缺少第二个参数：显示自启动状态
             if (args.Length < 2)
             {
-                RuntimeConsole.WriteDirect($"[Console] 自启动：{(RuntimeConsole.AutoStartListening ? "开启" : "关闭")}。用法：listen autostart on/off");
+                RuntimeConsole.WriteDirect($"[Console] 自启动：{(AutoStartListening ? "开启" : "关闭")}。用法：listen autostart on/off");
                 return;
             }
 
             switch (args[1].ToLowerInvariant())
             {
                 case "on":
-                    RuntimeConsole.AutoStartListening = true;
+                    AutoStartListening = true;
                     RuntimeConsole.WriteDirect("[Console] 自启动监听已开启（下次初始化时自动开始监听）。");
                     break;
 
                 case "off":
-                    RuntimeConsole.AutoStartListening = false;
+                    AutoStartListening = false;
                     RuntimeConsole.WriteDirect("[Console] 自启动监听已关闭（下次初始化时不再自动监听）。");
                     break;
 
