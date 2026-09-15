@@ -5,7 +5,7 @@
 ## v0.0.24
 
 ### Added
-- 新增 `Runtime Console Font` 样本（`Samples~/Font`）：Noto Sans SC 字体资源（源字体、字符集与生成的 SDF 字体资产），供 `Runtime Console Sample` 渲染中文。
+- 新增 `Font` 样本（`Samples~/Font`）：Noto Sans SC 字体资源（源字体、字符集与生成的 SDF 字体资产），供 `Runtime Console Sample` 渲染中文。
 
 ### Changed
 - 日志列表改用虚拟化 `ListView`（makeItem / bindItem）替代 `ScrollView` 全量重建：大量日志时只实例化可见行，滚动时回收复用，避免每条日志 O(n) 清空重建。

@@ -43,7 +43,7 @@
       "path": "Samples~/Shader"
     },
     {
-      "displayName": "Runtime Console Font",
+      "displayName": "Font",
       "description": "Noto Sans SC font resources (source font, character set, and generated SDF font asset) used by the Runtime Console Sample to render Chinese text.",
       "path": "Samples~/Font"
     },
