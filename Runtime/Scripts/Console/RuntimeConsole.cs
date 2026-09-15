@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -148,7 +149,8 @@ namespace VoyageForge.Depot.Runtime.Console
         /// </summary>
         public static bool AutoStartListening
         {
-            get => PlayerPrefs.GetInt(AutoStartListeningPrefKey, 1) == 1;
+            // 默认不自动监听：改为通过 listen on / listen autostart on 显式开启
+            get => PlayerPrefs.GetInt(AutoStartListeningPrefKey, 0) == 1;
             set => PlayerPrefs.SetInt(AutoStartListeningPrefKey, value ? 1 : 0);
         }
 
@@ -179,6 +181,115 @@ namespace VoyageForge.Depot.Runtime.Console
             {
                 Instance.HandleLog(message, string.Empty, type);
             }
+        }
+
+        // ---------------------------------------------------------------
+        // 直接日志输出（RuntimeConsole.Log / Warning / Error）
+        // ---------------------------------------------------------------
+
+        /// <summary>编辑器里把日志转接 Debug.Log 时，抑制桥接监听重复捕获该条日志。</summary>
+        private static bool _suppressBridgeCapture;
+
+        /// <summary>
+        /// 输出普通日志。
+        /// 编辑器非播放模式：仅打印到 Unity 控制台；
+        /// 编辑器播放模式：写入 RuntimeConsole 缓冲，同时打印到 Unity 控制台；
+        /// 构建（运行时）：仅写入 RuntimeConsole 缓冲。
+        /// </summary>
+        /// <param name="message">日志内容（任意对象，等价于 Debug.Log(object)）。</param>
+        public static void Log(object message,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0)
+        {
+            WriteLog(LogType.Log, message, filePath, lineNumber);
+        }
+
+        /// <summary>输出警告日志，行为同 <see cref="Log"/>。</summary>
+        /// <param name="message">日志内容。</param>
+        public static void Warning(object message,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0)
+        {
+            WriteLog(LogType.Warning, message, filePath, lineNumber);
+        }
+
+        /// <summary>输出错误日志，行为同 <see cref="Log"/>。</summary>
+        /// <param name="message">日志内容。</param>
+        public static void Error(object message,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0)
+        {
+            WriteLog(LogType.Error, message, filePath, lineNumber);
+        }
+
+        /// <summary>写入日志的公共实现：根据运行环境分流，并捕获调用方栈。</summary>
+        /// <param name="type">日志类型。</param>
+        /// <param name="message">日志内容。</param>
+        /// <param name="filePath">调用方源文件路径（由 CallerFilePath 注入）。</param>
+        /// <param name="lineNumber">调用方行号（由 CallerLineNumber 注入）。</param>
+        private static void WriteLog(LogType type, object message, string filePath, int lineNumber)
+        {
+            string text = message?.ToString() ?? "null";
+
+            // 编辑器非播放模式：RuntimeConsole 不存在，仅打印到 Unity 控制台
+            if (Application.isEditor && !Application.isPlaying)
+            {
+                UnityLog(type, WithCallerLocation(text, filePath, lineNumber));
+                return;
+            }
+
+            // 捕获调用方栈：跳过 WriteLog 与 Log/Warning/Error 两层包装，从真正的调用方开始记录
+            string stack = new System.Diagnostics.StackTrace(2, true).ToString();
+
+            // 播放模式：直接写入 RuntimeConsole 缓冲（不经过 logMessageReceived）
+            if (HasInstance)
+            {
+                Instance.HandleLog(text, stack, type);
+            }
+
+            // 编辑器播放模式：同时打印到 Unity 控制台（抑制桥接监听重复捕获）
+            if (Application.isEditor)
+            {
+                _suppressBridgeCapture = true;
+                UnityLog(type, WithCallerLocation(text, filePath, lineNumber));
+                _suppressBridgeCapture = false;
+            }
+        }
+
+        /// <summary>按日志类型调用对应的 Unity Debug 输出。</summary>
+        /// <param name="type">日志类型。</param>
+        /// <param name="message">日志内容。</param>
+        private static void UnityLog(LogType type, string message)
+        {
+            switch (type)
+            {
+                case LogType.Warning:
+                    Debug.LogWarning(message);
+                    break;
+                case LogType.Error:
+                case LogType.Assert:
+                case LogType.Exception:
+                    Debug.LogError(message);
+                    break;
+                default:
+                    Debug.Log(message);
+                    break;
+            }
+        }
+
+        /// <summary>给 Unity 控制台消息附加调用方“文件:行号”前缀，便于定位来源。</summary>
+        /// <param name="text">原始日志内容。</param>
+        /// <param name="filePath">调用方源文件路径。</param>
+        /// <param name="lineNumber">调用方行号。</param>
+        private static string WithCallerLocation(string text, string filePath, int lineNumber)
+        {
+            if (string.IsNullOrEmpty(filePath))
+            {
+                return text;
+            }
+
+            string fileName = System.IO.Path.GetFileName(filePath);
+            return $"[{fileName}:{lineNumber}] {text}";
         }
 
         /// <summary>订阅或取消订阅 Unity 日志回调（幂等）。</summary>
@@ -212,9 +323,9 @@ namespace VoyageForge.Depot.Runtime.Console
             BuildPanel();
             StartCommandScan();
 
-            // 日志监听：自启动开启时初始化即开始监听；关闭时按持久化的“是否监听”恢复上次状态。
+            // 日志监听：默认不监听；自启动开启时初始化即开始监听；关闭时按持久化的“是否监听”恢复上次状态。
             // 自启动由 listen autostart on/off 命令控制，“是否监听”由 listen on/off 控制，均持久化在 PlayerPrefs。
-            bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 1) == 1;
+            bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 0) == 1;
             ApplyListening(listen);
 
             OnConsoleInitialized();
@@ -410,6 +521,12 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>Unity 日志回调：封装条目写入缓冲，并通知外部与派生类。</summary>
         private void HandleLog(string condition, string stackTrace, LogType type)
         {
+            // 编辑器里 RuntimeConsole.Log 转接 Debug.Log 时，跳过桥接监听的重复捕获
+            if (_suppressBridgeCapture)
+            {
+                return;
+            }
+
             ConsoleLogEntry entry = new ConsoleLogEntry(
                 condition,
                 stackTrace,
