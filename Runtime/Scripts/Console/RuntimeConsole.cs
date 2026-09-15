@@ -132,11 +132,17 @@ namespace VoyageForge.Depot.Runtime.Console
         // 生命周期（继承自 MonoSingleton）
         // ---------------------------------------------------------------
 
-        /// <summary>MonoSingleton 初始化回调：构建面板、启动后台扫描命令。</summary>
+        /// <summary>MonoSingleton 初始化回调：构建面板、启动后台扫描命令并开始监听日志。</summary>
         protected override void OnInitialize()
         {
             BuildPanel();
             StartCommandScan();
+
+            // 初始化完成后立即开始监听日志：不依赖 OnEnable/OnDisable，
+            // 避免组件被禁用或重新启用时漏收/重复监听日志。
+            // 监听在 OnDestroying 中一次性移除，与这里配对。
+            Application.logMessageReceived += HandleLog;
+
             OnConsoleInitialized();
         }
 
@@ -149,12 +155,8 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>每收到一条日志时调用（在写入缓冲之后）。派生类可重写。</summary>
         protected virtual void OnLogReceived(ConsoleLogEntry entry) { }
 
-        private void OnEnable()
-        {
-            Application.logMessageReceived += HandleLog;
-        }
-
-        private void OnDisable()
+        /// <summary>销毁时移除日志监听（与初始化时的一次性订阅配对）。</summary>
+        protected override void OnDestroying()
         {
             Application.logMessageReceived -= HandleLog;
         }
@@ -310,8 +312,10 @@ namespace VoyageForge.Depot.Runtime.Console
             // 初始化界面状态
             _logList.ApplyFilterVisual();
             _logList.UpdateFilterCounts();
+
+            // 设置显隐：SetVisible(true) 内部会重建列表；隐藏时不再手动 RebuildList，
+            // 避免在后台实例化日志 item。
             SetVisible(_visibleOnInitialize);
-            _logList.RebuildList();
         }
 
         /// <summary>运行时创建默认 PanelSettings（回退方案）。</summary>
@@ -343,7 +347,9 @@ namespace VoyageForge.Depot.Runtime.Console
             EntryLogged?.Invoke(entry);
             OnLogReceived(entry);
 
-            // 面板可见时重建列表；仅“命令执行期间”或“本来就在底部”才滚动到底部
+            // 面板可见时才重建列表（实例化日志 item）；隐藏时仅写入缓冲，不实例化任何 UI 元素，
+            // 待下次显示时由 SetVisible(true) 统一重建。
+            // 仅“命令执行期间”或“本来就在底部”才滚动到底部。
             if (IsShown)
             {
                 _logList.RebuildList(_logList.ForceScrollToBottom || _logList.IsAtBottom());
