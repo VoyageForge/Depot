@@ -357,7 +357,10 @@ namespace VoyageForge.Depot.Runtime.Console
             element.AddToClassList(GetEntryClass(entry.Type));
 
             bool hasStack = !string.IsNullOrEmpty(entry.StackTrace);
-            refs.Caret.text = hasStack ? (refs.Model.IsExpanded ? "▾" : "▸") : string.Empty;
+
+            // 展开指示符使用 ASCII（> / v）：自定义中文字体（Noto Sans SC）不含 ▸ / ▾ 等几何图形字符，
+            // 而 ASCII 一定在字体中，能保证正常渲染。
+            refs.Caret.text = hasStack ? (refs.Model.IsExpanded ? "v" : ">") : string.Empty;
             refs.Timestamp.text = entry.Timestamp;
             refs.Message.text = entry.Message;
             refs.Stack.text = entry.StackTrace;
