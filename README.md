@@ -7,7 +7,7 @@ Depot 是 VoyageForge 的基础工具仓库，定位为 Unity 开发过程中的
 
 ## 当前内容
 - 运行时通用能力，例如数学工具、单例基类、场景引用与状态机辅助。
-- 基于 UI Toolkit 的运行时控制台，用于在运行时查看 Debug 日志、按类型过滤与执行简单命令。
+- 基于 UI Toolkit 的运行时控制台，支持直接输出日志、按需桥接 Unity 日志、按类型过滤与执行命令。
 - Android 原生能力封装，例如后台保活、APK 安装、系统设置跳转与后续可扩展的移动端桥接能力。
 - 编辑器辅助能力，例如只读属性绘制、Project Settings 配置、构建前自动版本处理与启动项控制。
 - 面向包开发的基础设施，例如程序集划分、打包元数据与工作流配置。
@@ -42,7 +42,7 @@ Depot 是 VoyageForge 的基础工具仓库，定位为 Unity 开发过程中的
 
 ## 运行时 Console
 
-`RuntimeConsole` 是基于 UI Toolkit（UXML + USS）实现的运行时控制台，用于在真机或运行时直接查看 `Debug.Log` / `LogWarning` / `LogError` / `Exception` 输出。
+`RuntimeConsole` 是基于 UI Toolkit（UXML + USS）实现的运行时控制台。默认不监听 Unity 日志，推荐用 `RuntimeConsole.Log / Warning / Error` 直接输出；如需把 `Debug.Log` / `LogWarning` / `LogError` / `Exception` 转发进来，执行 `listen on` 命令开启桥接。
 
 ### 使用方式
 
@@ -75,6 +75,16 @@ RuntimeConsole.ToggleInstance();
 RuntimeConsole.Instance.Clear();
 ```
 
+### 直接输出日志
+
+`RuntimeConsole.Log / Warning / Error` 直接写入控制台缓冲并自动捕获调用方栈；在编辑器非播放模式下仅打印到 Unity 控制台：
+
+```csharp
+RuntimeConsole.Log("普通日志");
+RuntimeConsole.Warning("警告");
+RuntimeConsole.Error("错误");
+```
+
 自定义命令只需继承 `ConsoleCommand` 并标注 `[Preserve]`（防止 IL2CPP 代码剥离），无需手动注册，会被自动发现：
 
 ```csharp
@@ -103,6 +113,7 @@ public sealed class HelloCommand : ConsoleCommand
 | `help` | `help` | 列出所有已注册命令及其用法、描述。 |
 | `clear` | `clear` | 清空日志缓冲与计数。 |
 | `log` | `log <message>` | 打印一段文本（参数拼回一句话）。 |
+| `listen` | `listen [on\|off\|autostart on\|off]` | 控制是否监听 Unity 日志并转发到控制台，支持自启动，状态持久化到 PlayerPrefs。 |
 | `exit` | `exit` | 退出 / 隐藏控制台（等价于点击关闭按钮）。 |
 
 `ConsoleCommand` 基类成员：
@@ -113,6 +124,9 @@ public sealed class HelloCommand : ConsoleCommand
 | `Usage` | 用法字符串，用于 `help` 展示；默认等于 `Name`。 |
 | `Description` | 简短描述，用于 `help` 展示；默认空字符串。 |
 | `Execute(string[] args)` | 抽象方法，命令执行体；`args` 为空格分隔的参数数组。 |
+| `GetArgumentCompletions(string[] args, string currentInput)` | 参数补全建议（可选，默认返回空）。 |
+| `OnCreate()` | 命令注册成功后（主线程）调用，可订阅事件、初始化状态。 |
+| `OnDestroy()` | 命令被移除时（主线程）调用，可清理资源、取消订阅。 |
 
 ### 生命周期
 
@@ -146,7 +160,7 @@ public sealed class HelloCommand : ConsoleCommand
 | 能力 | 说明 |
 | --- | --- |
 | 唤醒 | 连按 3 次 `Tab` 键切换显隐（次数与间隔窗口可配置）。 |
-| 日志捕获 | 自动订阅 `Application.logMessageReceived`，缓冲最近 300 条（`_maxEntries` 可调）。 |
+| 日志捕获 | 默认不监听 Unity 日志；用 `RuntimeConsole.Log / Warning / Error` 直写，或执行 `listen on` 桥接 Unity 日志。缓冲最近 300 条（`_maxEntries` 可调），列表采用虚拟化 `ListView` 渲染。 |
 | 类型过滤 | All / Log / Warning / Error 四档过滤。 |
 | 堆栈展开 | 点击日志条目展开/收起调用堆栈。 |
 | 拖拽 | 拖动顶部标题栏移动面板。 |
@@ -166,6 +180,7 @@ public sealed class HelloCommand : ConsoleCommand
 | `Runtime/Scripts/Console/Commands/ClearCommand.cs` | 内置 `clear` 命令。 |
 | `Runtime/Scripts/Console/Commands/HelpCommand.cs` | 内置 `help` 命令。 |
 | `Runtime/Scripts/Console/Commands/LogCommand.cs` | 内置 `log` 命令。 |
+| `Runtime/Scripts/Console/Commands/ListenCommand.cs` | 内置 `listen` 命令（监听 Unity 日志并转发）。 |
 | `Runtime/Scripts/Console/Commands/ExitCommand.cs` | 内置 `exit` 命令（退出控制台）。 |
 | `Runtime/Scripts/Console/RuntimeConsole.cs` | 运行时控制台组件。 |
 | `Runtime/Resources/Depot/Console/RuntimeConsole.uxml` | 控制台布局。 |
