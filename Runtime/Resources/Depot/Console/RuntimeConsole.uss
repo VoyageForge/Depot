@@ -269,7 +269,7 @@
     height: 7px;
     border-radius: 4px;
     flex-shrink: 0;
-    margin-top: 6px;   /* 让圆点与首行文字垂直对齐 */
+    align-self: center;   /* 垂直居中：替换原来的 margin-top 魔法数值，避免不同字体行高导致圆点错位 */
     margin-right: 7px;
     background-color: rgb(96, 130, 180);  /* Log 默认色 */
 }

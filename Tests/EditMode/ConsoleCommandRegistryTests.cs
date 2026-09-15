@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEngine;
 using NUnit.Framework;
 using VoyageForge.Depot.Runtime.Console;
 
@@ -18,6 +19,10 @@ namespace VoyageForge.Depot.Tests
         public void TearDown()
         {
             ConsoleCommandRegistry.Clear();
+
+            // 清理监听开关相关的 PlayerPrefs，避免测试间状态互相污染
+            PlayerPrefs.DeleteKey("Depot.Console.ListenLogs");
+            PlayerPrefs.DeleteKey("Depot.Console.AutoStartListening");
         }
 
         /// <summary>扫描 Depot.Runtime 程序集，应发现内置的 clear / help / log 命令。</summary>
@@ -32,6 +37,7 @@ namespace VoyageForge.Depot.Tests
             CollectionAssert.Contains(names, "help");
             CollectionAssert.Contains(names, "log");
             CollectionAssert.Contains(names, "exit");
+            CollectionAssert.Contains(names, "listen");
         }
 
         /// <summary>扫描测试程序集，应发现测试用命令（验证自定义命令可被反射发现）。</summary>
@@ -195,6 +201,85 @@ namespace VoyageForge.Depot.Tests
             ArgumentCompletionCommand command = new ArgumentCompletionCommand();
 
             Assert.IsEmpty(command.GetArgumentCompletions(new[] { "alice", "admin" }, string.Empty));
+        }
+
+        // ---- 日志监听开关（ListenCommand + RuntimeConsole 静态接口）----
+
+        /// <summary>listen 命令的参数补全：第一个参数提示 on / off / autostart。</summary>
+        [Test]
+        public void ListenCommand_参数补全_第一个参数提示开关()
+        {
+            ListenCommand command = new ListenCommand();
+
+            IReadOnlyList<string> completions = command.GetArgumentCompletions(new string[0], string.Empty);
+
+            CollectionAssert.AreEquivalent(new[] { "on", "off", "autostart" }, completions);
+        }
+
+        /// <summary>listen autostart 之后的参数补全：提示 on / off。</summary>
+        [Test]
+        public void ListenCommand_参数补全_autostart后提示开关()
+        {
+            ListenCommand command = new ListenCommand();
+
+            IReadOnlyList<string> completions = command.GetArgumentCompletions(new[] { "autostart" }, string.Empty);
+
+            CollectionAssert.AreEquivalent(new[] { "on", "off" }, completions);
+        }
+
+        /// <summary>listen on：应把“是否监听”持久化为开启。</summary>
+        [Test]
+        public void ListenCommand_Execute_on_开启监听并持久化()
+        {
+            ListenCommand command = new ListenCommand();
+
+            command.Execute(new[] { "on" });
+
+            Assert.AreEqual(1, PlayerPrefs.GetInt("Depot.Console.ListenLogs", -1));
+        }
+
+        /// <summary>listen off：应把“是否监听”持久化为关闭。</summary>
+        [Test]
+        public void ListenCommand_Execute_off_关闭监听并持久化()
+        {
+            ListenCommand command = new ListenCommand();
+
+            command.Execute(new[] { "off" });
+
+            Assert.AreEqual(0, PlayerPrefs.GetInt("Depot.Console.ListenLogs", -1));
+        }
+
+        /// <summary>listen autostart off：应把“自启动”持久化为关闭。</summary>
+        [Test]
+        public void ListenCommand_Execute_autostart_off_关闭自启动并持久化()
+        {
+            ListenCommand command = new ListenCommand();
+
+            command.Execute(new[] { "autostart", "off" });
+
+            Assert.AreEqual(0, PlayerPrefs.GetInt("Depot.Console.AutoStartListening", -1));
+        }
+
+        /// <summary>RuntimeConsole.SetListening 应把“是否监听”写入 PlayerPrefs。</summary>
+        [Test]
+        public void SetListening_写入PlayerPrefs()
+        {
+            RuntimeConsole.SetListening(false);
+            Assert.AreEqual(0, PlayerPrefs.GetInt("Depot.Console.ListenLogs", -1));
+
+            RuntimeConsole.SetListening(true);
+            Assert.AreEqual(1, PlayerPrefs.GetInt("Depot.Console.ListenLogs", -1));
+        }
+
+        /// <summary>RuntimeConsole.AutoStartListening 应通过 PlayerPrefs 读写自启动开关。</summary>
+        [Test]
+        public void AutoStartListening_读写PlayerPrefs()
+        {
+            RuntimeConsole.AutoStartListening = false;
+            Assert.IsFalse(RuntimeConsole.AutoStartListening);
+
+            RuntimeConsole.AutoStartListening = true;
+            Assert.IsTrue(RuntimeConsole.AutoStartListening);
         }
 
         /// <summary>
