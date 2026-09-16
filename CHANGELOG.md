@@ -24,7 +24,7 @@
 - 移除 FileBrowser（迁移至 `feature/file-browser` 分支）。
 
 ### Tests
-- 新增 `listen` 命令与日志监听开关的测试用例（参数补全、执行持久化、PlayerPrefs 读写），命令注册表测试覆盖至 23 个。
+- 新增 `listen` 命令与日志监听开关的测试用例（参数补全、执行持久化、PlayerPrefs 读写），命令注册表测试覆盖至 22 个。
 
 ## v0.0.23
 

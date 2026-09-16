@@ -88,7 +88,6 @@ RuntimeConsole.Error("错误");
 自定义命令只需继承 `ConsoleCommand` 并标注 `[Preserve]`（防止 IL2CPP 代码剥离），无需手动注册，会被自动发现：
 
 ```csharp
-using UnityEngine;
 using UnityEngine.Scripting;
 using VoyageForge.Depot.Runtime.Console;
 
@@ -101,7 +100,7 @@ public sealed class HelloCommand : ConsoleCommand
 
     public override void Execute(string[] args)
     {
-        Debug.Log("Hello " + string.Join(" ", args));
+        RuntimeConsole.WriteDirect("Hello " + string.Join(" ", args));
     }
 }
 ```

@@ -1,4 +1,3 @@
-using UnityEngine;
 using UnityEngine.Scripting;
 
 namespace VoyageForge.Depot.Runtime.Console
@@ -25,8 +24,8 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <param name="args">要打印的参数。</param>
         public override void Execute(string[] args)
         {
-            // 用空格把参数重新拼成一句话
-            Debug.Log($"[Console] {string.Join(" ", args)}");
+            // 用空格把参数重新拼成一句话，直接写入控制台（不再依赖 Unity 日志桥接）
+            RuntimeConsole.WriteDirect($"[Console] {string.Join(" ", args)}");
         }
     }
 }

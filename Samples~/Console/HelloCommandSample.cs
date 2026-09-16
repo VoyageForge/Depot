@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 using UnityEngine.Scripting;
 using VoyageForge.Depot.Runtime.Console;
 
@@ -33,7 +32,7 @@ namespace VoyageForge.Depot.Samples.Console
         public override void Execute(string[] args)
         {
             string name = args.Length > 0 ? args[0] : "world";
-            Debug.Log($"[Hello] Hi, {name}!");
+            RuntimeConsole.WriteDirect($"[Hello] Hi, {name}!");
         }
 
         /// <summary>

@@ -178,12 +178,12 @@ namespace VoyageForge.Depot.Runtime.Console
                 catch (Exception ex)
                 {
                     ForceScrollToBottom?.Invoke(false);
-                    Debug.LogError($"[Console] 命令 '{command}' 执行失败：{ex.Message}");
+                    RuntimeConsole.WriteDirect($"[Console] 命令 '{command}' 执行失败：{ex.Message}", LogType.Error);
                 }
             }
             else
             {
-                Debug.LogWarning($"[Console] 未知命令：{command}");
+                RuntimeConsole.WriteDirect($"[Console] 未知命令：{command}", LogType.Warning);
             }
         }
 

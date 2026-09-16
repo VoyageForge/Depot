@@ -130,8 +130,8 @@ namespace VoyageForge.Depot.Runtime.Console
         }
 
         /// <summary>
-        /// 直接向控制台写入一条日志（绕过 logMessageReceived）。
-        /// 用于监听关闭时仍能显示命令输出（例如 listen 命令的状态提示）。
+        /// 直接向控制台写入一行（绕过 logMessageReceived，不捕获调用方栈）。
+        /// 供内置命令与命令执行反馈输出使用（help / log / listen 状态、未知命令提示等）。
         /// </summary>
         /// <param name="message">日志内容。</param>
         /// <param name="type">日志类型（默认 Log）。</param>

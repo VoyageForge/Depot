@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using UnityEngine;
 using UnityEngine.Scripting;
 
 namespace VoyageForge.Depot.Runtime.Console
@@ -45,7 +44,7 @@ namespace VoyageForge.Depot.Runtime.Console
                   .Append(command.Description);
             }
 
-            Debug.Log(sb.ToString());
+            RuntimeConsole.WriteDirect(sb.ToString());
         }
     }
 }

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 using UnityEngine.Scripting;
 using VoyageForge.Depot.Runtime.Console;
 
@@ -33,7 +32,7 @@ namespace VoyageForge.Depot.Samples.Console
         {
             string name = args.Length > 0 ? args[0] : "anonymous";
             string role = args.Length > 1 ? args[1] : "user";
-            Debug.Log($"[Login] {name} 以 {role} 身份登录");
+            RuntimeConsole.WriteDirect($"[Login] {name} 以 {role} 身份登录");
         }
 
         /// <summary>

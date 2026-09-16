@@ -45,8 +45,8 @@ namespace VoyageForge.Depot.Samples.Console
             // 创建单例并完成面板构建；默认不显示，等待三连 Tab 唤醒
             RuntimeConsole.Initialize();
 
-            // 打印一条日志，唤醒控制台后即可看到，用于验证日志捕获链路
-            Debug.Log("Depot 运行时控制台已初始化（隐藏中），连按 3 次 Tab 键唤醒。");
+            // 打印一条日志，唤醒控制台后即可看到（直接写入控制台，不依赖日志桥接）
+            RuntimeConsole.Log("Depot 运行时控制台已初始化（隐藏中），连按 3 次 Tab 键唤醒。");
         }
     }
 }
