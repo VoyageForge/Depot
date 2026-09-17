@@ -3,6 +3,7 @@
     "rootNamespace": "VoyageForge.Depot.Tests",
     "references": [
         "VoyageForge.Depot.Runtime",
+        "VoyageForge.Depot.Editor",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
