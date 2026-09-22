@@ -12,13 +12,15 @@ namespace VoyageForge.Depot.Runtime.Console
     /// 本命令独占「Unity 日志 → RuntimeConsole」的桥接职责：自己订阅 Application.logMessageReceived，
     /// 把日志转发给 RuntimeConsole.WriteLogEntry；开关状态与自启动设置持久化在 PlayerPrefs。
     ///
-    /// 生命周期：
-    /// - <see cref="OnCreate"/>：命令注册成功后（主线程）按自启动设置决定是否开始监听；
-    /// - <see cref="OnDestroy"/>：命令被移除时（主线程）取消监听。
+    /// 启动早期缓存：
+    /// - 自启动开启时，<see cref="EarlyInit"/>（BeforeSceneLoad）会提前订阅缓存 handler，
+    ///   把启动窗口（其它 [RuntimeInitializeOnLoadMethod] 打印）的日志先缓存起来；
+    /// - <see cref="OnCreate"/> 在命令注册后（RuntimeConsole 实例已创建）把缓存填充进控制台，
+    ///   之后切换到实时转发。
     ///
     /// 用法：
     ///   listen                        查看当前监听状态与自启动状态；
-    ///   listen on / off               开启 / 关闭日志监听（持久化到 PlayerPrefs）；
+    ///   listen on / off               开启 / 关闭日志监听（持久化到 PlayerPrefs，off 会立即丢弃缓存）；
     ///   listen autostart on / off     开启 / 关闭自启动（持久化，影响下次初始化）。
     ///
     /// 标注 [Preserve] 防止 IL2CPP 代码剥离，确保反射自动发现能注册本命令。
@@ -30,7 +32,13 @@ namespace VoyageForge.Depot.Runtime.Console
         private const string ListenLogsPrefKey = "Depot.Console.ListenLogs";
         private const string AutoStartListeningPrefKey = "Depot.Console.AutoStartListening";
 
-        /// <summary>当前是否已订阅 Unity 日志回调（实例状态，不复用静态字段）。</summary>
+        // 启动窗口缓存上限，与日志缓冲上限对齐
+        private const int MaxPendingLogs = 300;
+
+        // 启动窗口缓存：早于命令实例存在（静态），仅自启动开启时积累
+        private static readonly List<ConsoleLogEntry> PendingLogs = new List<ConsoleLogEntry>();
+
+        /// <summary>当前是否已订阅 Unity 日志回调（实例状态）。</summary>
         private bool _listening;
 
         /// <inheritdoc />
@@ -42,28 +50,75 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <inheritdoc />
         public override string Usage => "listen [on|off|autostart on|autostart off]";
 
-        /// <summary>
-        /// 是否自启动监听（持久化到 PlayerPrefs）。
-        /// 开启后，本命令注册成功时（主线程）会自动开始监听 Unity 日志。
-        /// </summary>
-        private bool AutoStartListening
+        /// <summary>是否自启动监听（持久化到 PlayerPrefs）。</summary>
+        private static bool AutoStartListening
         {
             get => PlayerPrefs.GetInt(AutoStartListeningPrefKey, 0) == 1;
             set => PlayerPrefs.SetInt(AutoStartListeningPrefKey, value ? 1 : 0);
         }
 
-        /// <summary>命令注册成功后调用（主线程）：按自启动设置决定是否开始监听。</summary>
-        public override void OnCreate()
+        /// <summary>
+        /// 启动早期订阅（BeforeSceneLoad，早于所有 AfterSceneLoad）：
+        /// 只有自启动开启时才订阅缓存 handler，把启动窗口的日志先缓存起来，避免漏掉其它
+        /// [RuntimeInitializeOnLoadMethod] 打印的日志。
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void EarlyInit()
         {
-            // 自启动开启 → 强制监听；关闭 → 按持久化的“是否监听”恢复上次状态
-            bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 0) == 1;
-            SetListening(listen, persist: false);
+            // 防御：清理可能的残留（如关闭域重载 + 上次强退遗留），再按自启动决定是否缓存
+            PendingLogs.Clear();
+
+            if (AutoStartListening)
+            {
+                Application.logMessageReceived += CacheLog;
+            }
         }
 
-        /// <summary>命令被移除时调用（主线程）：取消监听，避免订阅泄漏。</summary>
+        /// <summary>缓存 Unity 日志（有上限），待命令注册后填充进控制台。</summary>
+        /// <param name="condition">日志正文。</param>
+        /// <param name="stackTrace">调用堆栈。</param>
+        /// <param name="type">日志类型。</param>
+        private static void CacheLog(string condition, string stackTrace, LogType type)
+        {
+            PendingLogs.Add(new ConsoleLogEntry(condition, stackTrace, type, DateTime.Now.ToString("HH:mm:ss.fff")));
+
+            if (PendingLogs.Count > MaxPendingLogs)
+            {
+                PendingLogs.RemoveAt(0);
+            }
+        }
+
+        /// <summary>
+        /// 命令注册成功后调用（主线程，此时 RuntimeConsole 实例已创建）：
+        /// 把启动窗口缓存填充进控制台，然后切换为实时转发。
+        /// </summary>
+        public override void OnCreate()
+        {
+            bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 0) == 1;
+
+            // 填充启动窗口缓存：走非创建访问（FlushPendingLogs 内部判 HasInstance），
+            // 避免在初始化链上直接调用创建型 Instance 导致重入爆栈。
+            RuntimeConsole.FlushPendingLogs(PendingLogs);
+            PendingLogs.Clear();
+
+            // 取消缓存 handler，切换到最终状态
+            Application.logMessageReceived -= CacheLog;
+
+            _listening = false;
+            if (listen)
+            {
+                Application.logMessageReceived += HandleUnityLog;
+                _listening = true;
+            }
+        }
+
+        /// <summary>命令被移除时调用（主线程）：清理订阅与缓存。</summary>
         public override void OnDestroy()
         {
-            SetListening(false, persist: false);
+            Application.logMessageReceived -= CacheLog;
+            Application.logMessageReceived -= HandleUnityLog;
+            PendingLogs.Clear();
+            _listening = false;
         }
 
         /// <summary>
@@ -90,6 +145,7 @@ namespace VoyageForge.Depot.Runtime.Console
 
                 case "off":
                     SetListening(false, persist: true);
+                    PendingLogs.Clear();  // 立即丢弃缓存
                     RuntimeConsole.WriteDirect("[Console] 日志监听已关闭。");
                     break;
 
@@ -130,7 +186,7 @@ namespace VoyageForge.Depot.Runtime.Console
             }
         }
 
-        /// <summary>Unity 日志回调：把日志转发到 RuntimeConsole（决定是否打印到控制台）。</summary>
+        /// <summary>Unity 日志回调：实时转发到 RuntimeConsole（决定是否打印到控制台）。</summary>
         /// <param name="condition">日志正文。</param>
         /// <param name="stackTrace">调用堆栈。</param>
         /// <param name="type">日志类型。</param>

@@ -2,6 +2,14 @@
 
 本文件由开发者手动维护，发布流程不会自动生成或修改此文件。
 
+## v0.0.25
+
+### Added
+- `listen` 命令新增启动早期日志缓存：自启动开启时，在 `BeforeSceneLoad` 提前订阅并缓存启动窗口日志（避免漏掉其它 `[RuntimeInitializeOnLoadMethod]` 打印的日志），命令注册后一次性填充进控制台，之后实时转发。
+
+### Fixed
+- 命令与示例改用 `RuntimeConsole` 直写输出（`log` / `help` / 命令执行反馈 / 示例命令），避免「默认不监听 Unity 日志」时命令输出丢失。
+
 ## v0.0.24
 
 ### Added

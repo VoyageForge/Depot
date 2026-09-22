@@ -445,20 +445,60 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>把一条日志写入缓冲并渲染（供 Log/Warning/Error、WriteDirect 与 ListenCommand 桥接共用）。</summary>
         public void WriteLogEntry(string condition, string stackTrace, LogType type)
         {
-            ConsoleLogEntry entry = new ConsoleLogEntry(
+            WriteLogEntry(new ConsoleLogEntry(
                 condition,
                 stackTrace,
                 type,
-                DateTime.Now.ToString("HH:mm:ss.fff"));
+                DateTime.Now.ToString("HH:mm:ss.fff")));
+        }
 
+        /// <summary>把一条已构建的日志条目写入缓冲并渲染（保留条目自带的时间戳）。</summary>
+        /// <param name="entry">日志条目。</param>
+        public void WriteLogEntry(ConsoleLogEntry entry)
+        {
+            AddLogEntry(entry);
+            RefreshIfShown();
+        }
+
+        /// <summary>
+        /// 批量刷入启动窗口缓存的日志（非创建访问：实例不存在时安全跳过）。
+        /// 供 <see cref="ListenCommand.OnCreate"/> 填充启动早期日志，避免直接调用创建型 Instance。
+        /// </summary>
+        /// <param name="entries">待刷入的日志条目。</param>
+        public static void FlushPendingLogs(IReadOnlyList<ConsoleLogEntry> entries)
+        {
+            if (!HasInstance || entries == null || entries.Count == 0)
+            {
+                return;
+            }
+
+            Instance.FlushLogEntries(entries);
+        }
+
+        /// <summary>批量把日志条目写入缓冲（最后统一渲染一次）。</summary>
+        /// <param name="entries">日志条目集合。</param>
+        private void FlushLogEntries(IReadOnlyList<ConsoleLogEntry> entries)
+        {
+            foreach (ConsoleLogEntry entry in entries)
+            {
+                AddLogEntry(entry);
+            }
+
+            RefreshIfShown();
+        }
+
+        /// <summary>把日志条目写入缓冲并通知外部与派生类（不渲染）。</summary>
+        /// <param name="entry">日志条目。</param>
+        private void AddLogEntry(ConsoleLogEntry entry)
+        {
             _logList.AddLog(entry);
-
             EntryLogged?.Invoke(entry);
             OnLogReceived(entry);
+        }
 
-            // 面板可见时才刷新列表（增量渲染新日志）；隐藏时仅写入缓冲，不实例化任何 UI 元素，
-            // 待下次显示时由 SetVisible(true) 统一重建。
-            // 仅“命令执行期间”或“本来就在底部”才滚动到底部。
+        /// <summary>面板可见时刷新列表；仅“命令执行期间”或“本来就在底部”才滚动到底部。</summary>
+        private void RefreshIfShown()
+        {
             if (IsShown)
             {
                 _logList.RefreshView(_logList.ForceScrollToBottom || _logList.IsAtBottom());
