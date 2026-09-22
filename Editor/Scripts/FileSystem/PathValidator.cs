@@ -30,6 +30,16 @@ namespace VoyageForge.Depot.Editor.FileSystem
         /// 系统保留设备名。
         /// 在 Windows 上，"CON"、"NUL" 等名字即使带扩展名（CON.txt）也无法创建，
         /// 所以在虚拟层里直接一并禁止，避免跨平台行为不一致。
+        ///
+        /// <c>CONIN$</c> / <c>CONOUT$</c> 是控制台输入 / 输出的设备名，
+        /// 同样属于"写出来像普通文件、实际上会落到设备上"的名字
+        /// （Go 的 os.Root 文档也专门点名过 CONOUT$），所以一并禁止。
+        ///
+        /// ⚠ 这里刻意【不】跟虚拟路径空间一起改成区分大小写：
+        ///   本集合里的名字是"Windows 设备名"，而 Windows 判断设备名是不区分大小写的
+        ///   （con、CON、Con 都落到同一个设备）。若改成 Ordinal，
+        ///   "con.txt" 就会被放行，可它在 Windows 上根本创建不出来——
+        ///   那等于把问题从"提前报错"推迟成"运行期诡异失败"。
         /// </summary>
         private static readonly HashSet<string> s_reservedNames =
             new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
@@ -39,6 +49,7 @@ namespace VoyageForge.Depot.Editor.FileSystem
                 "COM6", "COM7", "COM8", "COM9",
                 "LPT1", "LPT2", "LPT3", "LPT4", "LPT5",
                 "LPT6", "LPT7", "LPT8", "LPT9",
+                "CONIN$", "CONOUT$",
             };
 
         /// <summary>
@@ -130,6 +141,8 @@ namespace VoyageForge.Depot.Editor.FileSystem
             PathError.ReservedName       => "使用了系统保留设备名（如 CON、NUL、COM1）",
             PathError.TrailingSpaceOrDot => "目录名或文件名不能以空格或英文句点结尾",
             PathError.EscapeRoot         => "\"..\" 层级过多，已越过根目录",
+            PathError.OutsideRoot        => "路径落在根目录之外",
+            PathError.NoRootPath         => "当前文件系统没有指定根目录路径，无法换算真实路径",
             PathError.InvalidSegment     => "拼接的片段中包含非法名字",
             _                            => "未知错误",
         };

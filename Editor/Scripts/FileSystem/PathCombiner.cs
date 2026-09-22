@@ -300,12 +300,13 @@ namespace VoyageForge.Depot.Editor.FileSystem
             if (!VfsPath.TryParse(fromPath, out var from, out error)) return false;
             if (!VfsPath.TryParse(toPath, out var to, out error)) return false;
 
-            // 消掉公共前缀
+            // 消掉公共前缀。按 Ordinal 比较，与虚拟节点表的"区分大小写"策略一致：
+            // "/Docs/a" 与 "/docs/a" 是两个不同的路径，公共前缀只有根。
             var common = 0;
             var minLen = Math.Min(from.Segments.Count, to.Segments.Count);
             while (common < minLen &&
                    string.Equals(from.Segments[common], to.Segments[common],
-                                 StringComparison.OrdinalIgnoreCase))
+                                 StringComparison.Ordinal))
                 common++;
 
             var parts = new List<string>();

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -22,6 +23,182 @@ namespace VoyageForge.Depot.Tests
         public void SetUp()
         {
             _fs = new VirtualFileSystem();
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  构造 / 根目录注入
+        // ════════════════════════════════════════════════════════════
+
+        /// <summary>默认构造出来的根是一个刚 new 出来的空目录。</summary>
+        [Test]
+        public void 默认构造_根是空目录()
+        {
+            var fs = new VirtualFileSystem();
+
+            Assert.IsNotNull(fs.Root);
+            Assert.IsNull(fs.Root.Parent);
+            Assert.AreEqual("", fs.Root.Name);
+            Assert.AreEqual("/", fs.Root.FullPath);
+            Assert.AreEqual(0, fs.List("/").Count);
+        }
+
+        /// <summary>外部可以直接 new 一个目录作为根传入（Name 默认为空串，正好是根的语义）。</summary>
+        [Test]
+        public void 构造_传入空目录_可作为空文件系统的根()
+        {
+            var root = new VfsDirectory();
+            var fs = new VirtualFileSystem(root);
+
+            Assert.AreSame(root, fs.Root);
+            Assert.IsFalse(fs.Exists("/anything"));
+            Assert.AreEqual("/", fs.Root.FullPath);
+        }
+
+        /// <summary>接管另一个文件系统的 Root 后，应能看到同一棵树。</summary>
+        [Test]
+        public void 构造_接管既有树_可读到原有内容()
+        {
+            var source = new VirtualFileSystem();
+            source.CreateDirectory("/docs/images");
+            source.CreateFile("/docs/readme.md", "hello");
+
+            var mounted = new VirtualFileSystem(source.Root);
+
+            Assert.AreSame(source.Root, mounted.Root);
+            Assert.AreEqual(PathKind.Directory, mounted.GetPathKind("/docs/images"));
+            Assert.AreEqual("hello", mounted.ReadAllText("/docs/readme.md"));
+            Assert.AreEqual(1, mounted.List("/").Count);
+        }
+
+        /// <summary>共享同一个根时，两个实例共享状态：一处修改另一处立刻可见。</summary>
+        [Test]
+        public void 构造_共享根_两个实例状态互通()
+        {
+            var source = new VirtualFileSystem();
+            var mounted = new VirtualFileSystem(source.Root);
+
+            mounted.CreateDirectory("/from-mounted");
+            source.CreateFile("/from-source.txt", "x");
+
+            Assert.IsTrue(source.Exists("/from-mounted"));
+            Assert.IsTrue(mounted.Exists("/from-source.txt"));
+            Assert.AreEqual("x", mounted.ReadAllText("/from-source.txt"));
+        }
+
+        /// <summary>根为 null 时应抛 ArgumentNullException（显式转型以选定目录重载）。</summary>
+        [Test]
+        public void 构造_根为null_抛异常()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () => { new VirtualFileSystem((VfsDirectory)null); });
+        }
+
+        /// <summary>字符串构造函数不允许空路径：想纯虚拟就该用无参构造。</summary>
+        [Test]
+        public void 构造_根路径为空_抛异常()
+        {
+            Assert.Throws<ArgumentException>(
+                () => { new VirtualFileSystem((string)null); });
+            Assert.Throws<ArgumentException>(
+                () => { new VirtualFileSystem(""); });
+            Assert.Throws<ArgumentException>(
+                () => { new VirtualFileSystem("   "); });
+        }
+
+        /// <summary>
+        /// 传入的目录还挂在别的树上时必须拒绝：否则其后代的 FullPath 会指回原来那棵树，
+        /// 与本文件系统里的规范化路径对不上。
+        /// </summary>
+        [Test]
+        public void 构造_根仍有父节点_抛异常()
+        {
+            var source = new VirtualFileSystem();
+            source.CreateDirectory("/docs");
+
+            var child = (VfsDirectory)source.Find("/docs");
+
+            Assert.Throws<ArgumentException>(() => { new VirtualFileSystem(child); });
+        }
+
+        /// <summary>被拒绝时不应破坏传入目录在原树中的位置。</summary>
+        [Test]
+        public void 构造_拒绝后_原树保持完整()
+        {
+            var source = new VirtualFileSystem();
+            source.CreateDirectory("/docs");
+            source.CreateFile("/docs/a.txt", "x");
+
+            var child = (VfsDirectory)source.Find("/docs");
+            Assert.Throws<ArgumentException>(() => { new VirtualFileSystem(child); });
+
+            Assert.IsTrue(source.Exists("/docs/a.txt"));
+            Assert.AreSame(source.Root, child.Parent);
+            Assert.AreEqual("/docs", child.FullPath);
+        }
+
+        // ════════════════════════════════════════════════════════════
+        //  大小写：虚拟路径空间刻意区分大小写
+        // ════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// 查找区分大小写：建了 "/A.txt" 之后 "/a.txt" 不应命中。
+        /// 这是刻意的——虚拟路径空间由我们自己定规则，区分大小写才能让行为
+        /// 在 Windows / Linux / macOS 上完全一致。
+        /// </summary>
+        [Test]
+        public void 查找_区分大小写()
+        {
+            _fs.CreateDirectory("/docs");
+            _fs.CreateFile("/docs/A.txt", "x");
+
+            Assert.IsTrue(_fs.Exists("/docs/A.txt"));
+            Assert.IsFalse(_fs.Exists("/docs/a.txt"));
+            Assert.IsFalse(_fs.Exists("/docs/A.TXT"));
+            Assert.AreEqual(PathKind.NotFound, _fs.GetPathKind("/docs/a.txt"));
+            Assert.IsNull(_fs.Find("/docs/a.txt"));
+        }
+
+        /// <summary>目录名同样区分大小写。</summary>
+        [Test]
+        public void 目录查找_区分大小写()
+        {
+            _fs.CreateDirectory("/Docs");
+
+            Assert.IsTrue(_fs.Exists("/Docs"));
+            Assert.IsFalse(_fs.Exists("/docs"));
+            Assert.IsFalse(_fs.Exists("/DOCS"));
+        }
+
+        /// <summary>
+        /// 同一目录下大小写不同的两个名字可以共存（内存树不受 Windows 磁盘限制），
+        /// 它们是两个彼此独立的节点。
+        /// </summary>
+        [Test]
+        public void 创建_大小写不同_是两个独立节点()
+        {
+            _fs.CreateDirectory("/docs");
+            _fs.CreateFile("/docs/a.txt", "lower");
+            _fs.CreateFile("/docs/A.txt", "upper");
+
+            Assert.AreEqual(2, _fs.List("/docs").Count);
+            Assert.AreEqual("lower", _fs.ReadAllText("/docs/a.txt"));
+            Assert.AreEqual("upper", _fs.ReadAllText("/docs/A.txt"));
+        }
+
+        /// <summary>
+        /// 移动的"原地不动"捷径也必须区分大小写：
+        /// "/a" 与 "/A" 是两个不同路径，按重命名处理。
+        /// </summary>
+        [Test]
+        public void 移动_仅大小写不同_按重命名处理()
+        {
+            _fs.CreateFile("/a.txt", "x");
+
+            var node = _fs.Move("/a.txt", "/A.txt");
+
+            Assert.AreEqual("/A.txt", node.FullPath);
+            Assert.IsFalse(_fs.Exists("/a.txt"));
+            Assert.AreEqual("x", _fs.ReadAllText("/A.txt"));
         }
 
         // ════════════════════════════════════════════════════════════
@@ -138,9 +315,23 @@ namespace VoyageForge.Depot.Tests
         [Test]
         public void GetPathKind_非法路径_当作不存在()
         {
-            Assert.AreEqual(PathKind.NotFound, _fs.GetPathKind("/a/CON"));
-            Assert.AreEqual(PathKind.NotFound, _fs.GetPathKind("   "));
+            Assert.AreEqual(PathKind.NotFound, _fs.GetPathKind("/a/CON"));   // 保留名
+            Assert.AreEqual(PathKind.NotFound, _fs.GetPathKind("   "));      // 空
+            Assert.AreEqual(PathKind.NotFound, _fs.GetPathKind("/a/b."));    // 尾随点
+        }
+
+        /// <summary>
+        /// 默认夹取模式下 "/../escape" 是【合法】路径（夹回根内的 /escape），
+        /// 只是根里没有该节点，所以结果同样是"不存在"——但原因不同，这里单独说明。
+        /// </summary>
+        [Test]
+        public void GetPathKind_夹取后的路径_合法但可能不存在()
+        {
             Assert.AreEqual(PathKind.NotFound, _fs.GetPathKind("/../escape"));
+
+            // 建好根内的 /escape 之后，夹取写法就能查到同一节点
+            _fs.CreateDirectory("/escape");
+            Assert.AreEqual(PathKind.Directory, _fs.GetPathKind("/../escape"));
         }
 
         /// <summary>TryResolve 应一次拿到节点引用和类型，省掉第二次查找。</summary>

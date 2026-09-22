@@ -44,6 +44,34 @@ namespace VoyageForge.Depot.Tests
             AssertSegmentIllegal("CON.a.b.c", PathError.ReservedName);
         }
 
+        /// <summary>
+        /// 控制台设备名 CONIN$ / CONOUT$ 也属于保留名
+        /// （写出来像普通文件，实际会落到控制台设备上）。
+        /// </summary>
+        [Test]
+        public void IsLegalSegment_控制台设备名_拒绝()
+        {
+            AssertSegmentIllegal("CONIN$", PathError.ReservedName);
+            AssertSegmentIllegal("CONOUT$", PathError.ReservedName);
+            AssertSegmentIllegal("conout$", PathError.ReservedName);       // 大小写不敏感
+            AssertSegmentIllegal("CONOUT$.txt", PathError.ReservedName);   // 带扩展名同样命中
+            // 只是以它开头的普通名字应放行
+            AssertSegmentLegal("CONOUT$x");
+            AssertSegmentLegal("MYCONOUT$");
+        }
+
+        /// <summary>
+        /// 保留名的判断刻意【保持】不区分大小写，与虚拟路径空间的区分大小写策略相反：
+        /// Windows 判断设备名本来就不区分大小写，"con.txt" 同样创建不出来，
+        /// 所以不能因为改成 Ordinal 就把它放行。
+        /// </summary>
+        [Test]
+        public void IsLegalSegment_保留名判断_不区分大小写()
+        {
+            AssertSegmentIllegal("CoN", PathError.ReservedName);
+            AssertSegmentIllegal("cOnOuT$", PathError.ReservedName);
+        }
+
         /// <summary>非法字符必须被拒绝，并回报 IllegalChar。</summary>
         [Test]
         public void IsLegalSegment_非法字符_拒绝()

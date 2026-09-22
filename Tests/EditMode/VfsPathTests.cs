@@ -58,13 +58,121 @@ namespace VoyageForge.Depot.Tests
             AssertFails("   ", PathError.Empty);
         }
 
-        /// <summary>越过根目录的 ".." 应被拒绝。</summary>
+        /// <summary>
+        /// 单参数重载用的是最严格的 Error 模式：解析成功的路径一定在根之内。
+        /// </summary>
         [Test]
         public void TryParse_越过根目录_报_EscapeRoot()
         {
             AssertFails("/../escape", PathError.EscapeRoot);
             AssertFails("../x", PathError.EscapeRoot);
             AssertFails("/a/../../b", PathError.EscapeRoot);
+        }
+
+        // ---- 夹取模式（RootEscapeMode.Clamp）：与 Windows 卷根一致 ----
+
+        /// <summary>
+        /// 夹取模式下越界的 ".." 被忽略，停在根目录——与 <c>C:\..</c> → <c>C:\</c> 同构。
+        /// 注意是"忽略"而不是"弹栈"：栈空时再 ".." 就是原地不动。
+        /// </summary>
+        [Test]
+        public void TryParse_夹取_根目录处的上级记号停在根()
+        {
+            AssertClamped("/..", "/");
+            AssertClamped("../..", "/");
+            AssertClamped("/../../../..", "/");
+        }
+
+        /// <summary>先夹取、再往下走：对应 <c>C:\..\..\Windows</c> → <c>C:\Windows</c>。</summary>
+        [Test]
+        public void TryParse_夹取_越界后再往下走()
+        {
+            AssertClamped("../../x", "/x");
+            AssertClamped("/../a/b.txt", "/a/b.txt");
+        }
+
+        /// <summary>根内回退到根之后，再 ".." 同样被夹取。</summary>
+        [Test]
+        public void TryParse_夹取_根内回退后再夹取()
+        {
+            AssertClamped("a/b/../..", "/");
+            AssertClamped("a/../../x", "/x");
+        }
+
+        /// <summary>夹取模式下永远不会标记越界，结果一定在根之内。</summary>
+        [Test]
+        public void TryParse_夹取_永不越界()
+        {
+            var path = VfsPath.Parse("/../../x", RootEscapeMode.Clamp);
+
+            Assert.IsFalse(path.EscapesRoot);
+            Assert.AreEqual("/x", path.Normalized);
+        }
+
+        // ---- 允许越过根目录（RootEscapeMode.Escape）----
+
+        /// <summary>允许越界时，越界的 ".." 被原样保留，并标记 EscapesRoot。</summary>
+        [Test]
+        public void TryParse_允许越界_保留上级记号()
+        {
+            VfsPath path;
+            PathError error;
+
+            Assert.IsTrue(VfsPath.TryParse("../x", RootEscapeMode.Escape,
+                                           out path, out error));
+            Assert.AreEqual(PathError.None, error);
+            Assert.IsTrue(path.EscapesRoot);
+            Assert.AreEqual("/../x", path.Normalized);
+            CollectionAssert.AreEqual(new[] { "..", "x" }, path.Segments);
+        }
+
+        /// <summary>
+        /// 越界的层级数不能丢：第二个 ".." 必须继续往外走，
+        /// 而不是把第一个 ".." 弹掉（否则 "../../x" 会被算成 "../x"）。
+        /// </summary>
+        [Test]
+        public void TryParse_允许越界_多层上级记号不丢失()
+        {
+            VfsPath path;
+            VfsPath.TryParse("../../x", RootEscapeMode.Escape, out path, out _);
+
+            CollectionAssert.AreEqual(new[] { "..", "..", "x" }, path.Segments);
+        }
+
+        /// <summary>越界后回退再进入，只应消耗"根内"的层级。</summary>
+        [Test]
+        public void TryParse_允许越界_越界后再回退()
+        {
+            VfsPath path;
+            VfsPath.TryParse("../../a/../b.txt", RootEscapeMode.Escape, out path, out _);
+
+            CollectionAssert.AreEqual(new[] { "..", "..", "b.txt" }, path.Segments);
+        }
+
+        /// <summary>根内的路径不应被标记为越界。</summary>
+        [Test]
+        public void EscapesRoot_根内路径为false()
+        {
+            Assert.IsFalse(VfsPath.Parse("/").EscapesRoot);
+            Assert.IsFalse(VfsPath.Parse("/a/b").EscapesRoot);
+            Assert.IsFalse(VfsPath.Parse("/a/../b").EscapesRoot);
+            // 越界被拒绝时根本得不到 VfsPath，所以只有开着开关才可能为 true
+            Assert.IsTrue(VfsPath.Parse("/../b", RootEscapeMode.Escape).EscapesRoot);
+        }
+
+        /// <summary>三种模式对越界的处理互不相同。</summary>
+        [Test]
+        public void Parse_越界模式_决定结果()
+        {
+            // Error：抛异常
+            Assert.Throws<System.ArgumentException>(
+                () => VfsPath.Parse("../x", RootEscapeMode.Error));
+
+            // Clamp：夹取到根，结果是 /x
+            Assert.AreEqual("/x", VfsPath.Parse("../x", RootEscapeMode.Clamp).Normalized);
+
+            // Escape：保留越界记号
+            Assert.AreEqual("/../x", VfsPath.Parse("../x", RootEscapeMode.Escape).Normalized);
         }
 
         /// <summary>段名非法时，错误码应透传自 PathValidator。</summary>
@@ -183,6 +291,20 @@ namespace VoyageForge.Depot.Tests
             Assert.IsFalse(ok, $"\"{raw}\" 应当解析失败");
             Assert.IsNull(path);
             Assert.AreEqual(expected, error);
+        }
+
+        /// <summary>断言在夹取模式下解析成功、结果等于期望的规范化路径，且未标记越界。</summary>
+        /// <param name="raw">原始路径。</param>
+        /// <param name="expected">期望的规范化路径。</param>
+        private static void AssertClamped(string raw, string expected)
+        {
+            VfsPath path;
+            PathError error;
+            var ok = VfsPath.TryParse(raw, RootEscapeMode.Clamp, out path, out error);
+
+            Assert.IsTrue(ok, $"\"{raw}\" 在夹取模式下应当解析成功，实际错误：{error}");
+            Assert.AreEqual(expected, path.Normalized);
+            Assert.IsFalse(path.EscapesRoot, $"\"{raw}\" 在夹取模式下不应越界");
         }
     }
 }

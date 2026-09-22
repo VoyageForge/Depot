@@ -36,6 +36,17 @@ namespace VoyageForge.Depot.Editor.FileSystem
         /// <summary>是否就是根目录 "/"。</summary>
         public bool IsRoot => Segments.Count == 0;
 
+        /// <summary>
+        /// 本路径是否"爬到了根目录之外"，即规范化后以 ".." 开头。
+        /// 只有在解析时允许越过根（<c>allowEscapeRoot: true</c>）才可能出现：
+        /// 此时越界的 ".." 会被原样保留在段列表最前面，例如 "../x" → 段为 ["..","x"]。
+        ///
+        /// 这类路径在根目录之内的树里永远查不到节点，
+        /// 它的意义是"能把根目录之外的路径表达出来"（配合
+        /// <see cref="VirtualFileSystem.TryGetRealPath"/> 换算出真实磁盘路径）。
+        /// </summary>
+        public bool EscapesRoot => Segments.Count > 0 && Segments[0] == "..";
+
         /// <summary>最后一段的名字（文件名或目录名）；根目录返回空串。</summary>
         public string Name => IsRoot ? "" : Segments[Segments.Count - 1];
 
@@ -68,6 +79,17 @@ namespace VoyageForge.Depot.Editor.FileSystem
         }
 
         /// <summary>
+        /// 解析并校验一条路径，并要求结果必须落在根目录之内。
+        /// 这是最常用的重载，等价于 <c>TryParse(raw, allowEscapeRoot: false, ...)</c>。
+        /// </summary>
+        /// <param name="raw">用户输入的原始路径，允许用 "/" 或 "\" 作分隔符。</param>
+        /// <param name="path">成功时输出解析结果。</param>
+        /// <param name="error">失败时输出具体原因。</param>
+        /// <returns>解析成功返回 true。</returns>
+        public static bool TryParse(string raw, out VfsPath path, out PathError error)
+            => TryParse(raw, RootEscapeMode.Error, out path, out error);
+
+        /// <summary>
         /// 解析并校验一条路径。这是整个文件系统唯一的"入口校验点"。
         ///
         /// 处理流程：
@@ -76,12 +98,27 @@ namespace VoyageForge.Depot.Editor.FileSystem
         ///   ③ 记录"是否以分隔符结尾"（先 Trim 再判断）；
         ///   ④ 逐段拆分、校验，用栈处理 "." / ".."；
         ///   ⑤ 组装规范化的绝对路径。
+        ///
+        /// <paramref name="escapeMode"/> 控制 ".." 爬到根之上时的行为，
+        /// 三种取值见 <see cref="RootEscapeMode"/>：
+        ///   · <see cref="RootEscapeMode.Clamp"/>：忽略越界的 ".."，停在根目录；
+        ///   · <see cref="RootEscapeMode.Error"/>：报 <see cref="PathError.EscapeRoot"/>，
+        ///     于是任何解析成功的路径都保证在根之内；
+        ///   · <see cref="RootEscapeMode.Escape"/>：把越界的 ".." 原样保留为段
+        ///     （"../x" → ["..","x"]），解析成功但 <see cref="EscapesRoot"/> 为 true。
+        ///
+        /// 注意本重载的"单参数版"<see cref="TryParse(string, out VfsPath, out PathError)"/>
+        /// 用的是最严格的 <see cref="RootEscapeMode.Error"/>：它是最底层的解析原语，
+        /// 保持"解析成功即一定在根内"这个强约束；要 OS 式夹取请显式传
+        /// <see cref="RootEscapeMode.Clamp"/>（<see cref="VirtualFileSystem"/> 就是这么做的）。
         /// </summary>
         /// <param name="raw">用户输入的原始路径，允许用 "/" 或 "\" 作分隔符。</param>
+        /// <param name="escapeMode">".." 越过根目录时的处理方式。</param>
         /// <param name="path">成功时输出解析结果。</param>
         /// <param name="error">失败时输出具体原因。</param>
         /// <returns>解析成功返回 true。</returns>
-        public static bool TryParse(string raw, out VfsPath path, out PathError error)
+        public static bool TryParse(string raw, RootEscapeMode escapeMode,
+                                    out VfsPath path, out PathError error)
         {
             path = null;
 
@@ -117,6 +154,12 @@ namespace VoyageForge.Depot.Editor.FileSystem
             //   用栈模拟目录层级，".." 就是弹栈。
             var stack = new List<string>();
 
+            // 栈里"已经越界"的 ".." 个数（它们永远排在栈的最前面）。
+            // 为什么要单独记？因为这些 ".." 代表"根目录之外"，不能再被后面的
+            // ".." 弹掉——否则 "../../x" 会被算成 "../x"，越界的层数就丢了。
+            // 判据：栈里"根内的层级"数量 = stack.Count - escaped。
+            var escaped = 0;
+
             // 统一把反斜杠当正斜杠，然后用 Split 拆段。
             // SplitOptions.None：保留空段，我们自己在循环里跳过，
             // 这样 "/a//b" 和 "/a/b" 结果一致。
@@ -129,16 +172,36 @@ namespace VoyageForge.Depot.Editor.FileSystem
                 // "." 表示当前目录，直接忽略。
                 if (segment == ".") continue;
 
-                // ".." 表示上一级目录，弹栈。
+                // ".." 表示上一级目录。
                 if (segment == "..")
                 {
-                    if (stack.Count == 0)
+                    // 栈里已经没有"根内的层级"可弹了，说明再往上就要越过根目录。
+                    // 例："/../a"、"../../x"
+                    if (stack.Count == escaped)
                     {
-                        // 栈已空还要往上走，说明越过了根目录，这是非法路径。
-                        // 例："/../a"、"../../x"
-                        error = PathError.EscapeRoot;
-                        return false;
+                        switch (escapeMode)
+                        {
+                            case RootEscapeMode.Clamp:
+                                // 夹取：与 Windows 的 "C:\.." 一样，停在根目录原地不动。
+                                // 这里既不压栈也不弹栈，于是 ".." 被"吃掉"，
+                                // "/.." → "/"、"../../x" → "/x"，
+                                // 与 "C:\..\..\Windows" → "C:\Windows" 完全同构。
+                                continue;
+
+                            case RootEscapeMode.Escape:
+                                // 允许越过根时，把越界的 ".." 原样压栈保留下来，
+                                // 这样"越出去几层"不会丢失，交给上层去换算真实路径。
+                                stack.Add("..");
+                                escaped++;
+                                continue;
+
+                            default:
+                                error = PathError.EscapeRoot;
+                                return false;
+                        }
                     }
+
+                    // 还有根内的层级：正常弹栈，退到上一级。
                     stack.RemoveAt(stack.Count - 1);
                     continue;
                 }
@@ -167,9 +230,18 @@ namespace VoyageForge.Depot.Editor.FileSystem
         /// <param name="raw">用户输入的原始路径。</param>
         /// <returns>解析结果。</returns>
         /// <exception cref="ArgumentException">路径非法时抛出，消息为中文错误说明。</exception>
-        public static VfsPath Parse(string raw)
+        public static VfsPath Parse(string raw) => Parse(raw, RootEscapeMode.Error);
+
+        /// <summary>
+        /// 解析路径，失败直接抛异常；可指定 ".." 越过根目录时的处理方式。
+        /// </summary>
+        /// <param name="raw">用户输入的原始路径。</param>
+        /// <param name="escapeMode">".." 越过根目录时的处理方式。</param>
+        /// <returns>解析结果。</returns>
+        /// <exception cref="ArgumentException">路径非法时抛出，消息为中文错误说明。</exception>
+        public static VfsPath Parse(string raw, RootEscapeMode escapeMode)
         {
-            if (!TryParse(raw, out var path, out var error))
+            if (!TryParse(raw, escapeMode, out var path, out var error))
                 throw new ArgumentException(PathValidator.Describe(error), nameof(raw));
             return path;
         }

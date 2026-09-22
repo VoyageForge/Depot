@@ -136,5 +136,151 @@ namespace VoyageForge.Depot.Tests
 
             Assert.IsTrue(Path.IsPathRooted(absolute));
         }
+
+        // ---- 相对根目录的换算（TryMakeRelativeToRoot）----
+
+        /// <summary>"/" 开头的写法视为"相对根目录"，而不是当前盘符根目录。</summary>
+        [Test]
+        public void TryMakeRelativeToRoot_斜杠开头_视为相对根目录()
+        {
+            string relative;
+
+            Assert.IsTrue(DiskPath.TryMakeRelativeToRoot(_sandbox, "/a/b.txt",
+                                                         out relative, out _));
+            Assert.AreEqual(Path.Combine("a", "b.txt"), relative);
+        }
+
+        /// <summary>普通相对写法原样保留。</summary>
+        [Test]
+        public void TryMakeRelativeToRoot_相对写法_原样保留()
+        {
+            string relative;
+
+            Assert.IsTrue(DiskPath.TryMakeRelativeToRoot(_sandbox, "a/b.txt",
+                                                         out relative, out _));
+            Assert.AreEqual(Path.Combine("a", "b.txt"), relative);
+        }
+
+        /// <summary>".." 记号要保留下来，交给虚拟路径层去弹栈。</summary>
+        [Test]
+        public void TryMakeRelativeToRoot_保留上级记号()
+        {
+            string relative;
+
+            Assert.IsTrue(DiskPath.TryMakeRelativeToRoot(_sandbox, "../x",
+                                                         out relative, out _));
+            Assert.AreEqual(Path.Combine("..", "x"), relative);
+        }
+
+        /// <summary>根目录之内的绝对路径应换算成相对写法。</summary>
+        [Test]
+        public void TryMakeRelativeToRoot_根内绝对路径_换算为相对()
+        {
+            var file = Path.Combine(_sandbox, "a", "b.txt");
+            string relative;
+
+            Assert.IsTrue(DiskPath.TryMakeRelativeToRoot(_sandbox, file,
+                                                         out relative, out _));
+            Assert.AreEqual(Path.Combine("a", "b.txt"), relative);
+        }
+
+        /// <summary>输入就是根目录自身时（绝对路径写法）输出 "."。</summary>
+        [Test]
+        public void TryMakeRelativeToRoot_根目录自身_换算为当前目录()
+        {
+            string relative;
+
+            Assert.IsTrue(DiskPath.TryMakeRelativeToRoot(_sandbox, _sandbox,
+                                                         out relative, out _));
+            Assert.AreEqual(".", relative);
+        }
+
+        /// <summary>单独一个 "/" 也表示根目录自身。</summary>
+        [Test]
+        public void TryMakeRelativeToRoot_斜杠_表示根目录()
+        {
+            string relative;
+
+            Assert.IsTrue(DiskPath.TryMakeRelativeToRoot(_sandbox, "/",
+                                                         out relative, out _));
+            Assert.AreEqual(".", relative);
+        }
+
+        /// <summary>根目录之外的绝对路径默认应报 OutsideRoot。</summary>
+        [Test]
+        public void TryMakeRelativeToRoot_根外绝对路径_报_OutsideRoot()
+        {
+            var outside = Path.Combine(Path.GetDirectoryName(_sandbox), "elsewhere");
+            string relative;
+            PathError error;
+
+            Assert.IsFalse(DiskPath.TryMakeRelativeToRoot(_sandbox, outside,
+                                                          out relative, out error));
+            Assert.AreEqual(PathError.OutsideRoot, error);
+        }
+
+        /// <summary>允许越界时，根外绝对路径应换算成"从根退出去"的相对写法。</summary>
+        [Test]
+        public void TryMakeRelativeToRoot_允许越界_换算为退出去的写法()
+        {
+            var outside = Path.Combine(Path.GetDirectoryName(_sandbox), "elsewhere");
+            string relative;
+            PathError error;
+
+            var ok = DiskPath.TryMakeRelativeToRoot(_sandbox, outside,
+                                                    RootEscapeMode.Escape,
+                                                    out relative, out error);
+
+            Assert.IsTrue(ok);
+            Assert.AreEqual(PathError.None, error);
+            StringAssert.StartsWith("..", relative);
+        }
+
+        /// <summary>任一参数为空时失败，不抛异常。</summary>
+        [Test]
+        public void TryMakeRelativeToRoot_空参数_返回false()
+        {
+            string relative;
+            PathError error;
+
+            Assert.IsFalse(DiskPath.TryMakeRelativeToRoot("", "/a", out relative, out error));
+            Assert.AreEqual(PathError.Empty, error);
+
+            Assert.IsFalse(DiskPath.TryMakeRelativeToRoot(_sandbox, "", out relative, out error));
+            Assert.AreEqual(PathError.Empty, error);
+        }
+
+        // ---- 拼接真实路径（CombineWithRoot）----
+
+        /// <summary>
+        /// 关键回归点：<c>Path.Combine(root, "/a")</c> 会因为第二个参数是"根路径"
+        /// 而丢弃第一个参数；CombineWithRoot 必须先剥掉前导分隔符。
+        /// </summary>
+        [Test]
+        public void CombineWithRoot_不会因前导斜杠丢掉根()
+        {
+            var real = DiskPath.CombineWithRoot(_sandbox, "/a/b.txt");
+
+            Assert.AreEqual(Path.GetFullPath(Path.Combine(_sandbox, "a", "b.txt")), real);
+            Assert.IsTrue(DiskPath.IsSubPathOf(real, _sandbox, out _));
+        }
+
+        /// <summary>根路径自身应原样换算回来。</summary>
+        [Test]
+        public void CombineWithRoot_根路径自身()
+        {
+            Assert.AreEqual(Path.GetFullPath(_sandbox), DiskPath.CombineWithRoot(_sandbox, "/"));
+            Assert.AreEqual(Path.GetFullPath(_sandbox), DiskPath.CombineWithRoot(_sandbox, ""));
+        }
+
+        /// <summary>越界的 ".." 应被真正解析到根目录之外。</summary>
+        [Test]
+        public void CombineWithRoot_解析越界的上级记号()
+        {
+            var real = DiskPath.CombineWithRoot(_sandbox, "/../x.txt");
+
+            Assert.AreEqual(Path.GetFullPath(Path.Combine(_sandbox, "..", "x.txt")), real);
+            Assert.IsFalse(DiskPath.IsSubPathOf(real, _sandbox, out _));
+        }
     }
 }

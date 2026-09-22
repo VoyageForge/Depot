@@ -243,14 +243,27 @@ namespace VoyageForge.Depot.Tests
             Assert.AreEqual(".", relative);
         }
 
-        /// <summary>比较段名时忽略大小写，与虚拟文件系统的查找策略一致。</summary>
+        /// <summary>
+        /// 段名比较【区分大小写】，与虚拟节点表（<see cref="System.StringComparer.Ordinal"/>）一致：
+        /// "/Docs" 与 "/docs" 是两个不同目录，没有公共前缀，所以要一路退到根。
+        /// </summary>
         [Test]
-        public void TryGetRelative_段名大小写不同_视为同一层()
+        public void TryGetRelative_段名大小写不同_视为不同目录()
         {
             string relative;
             PathCombiner.TryGetRelative("/Docs/Sub", "/docs/Sub/b.txt", out relative, out _);
 
-            // "Docs/Sub" 与 "docs/Sub" 视为同一层，所以只剩最后一截是新层级。
+            // 公共前缀只有根，因此先退两层再往下走。
+            Assert.AreEqual("../../docs/Sub/b.txt", relative);
+        }
+
+        /// <summary>大小写完全一致时才有公共前缀，相对路径最短。</summary>
+        [Test]
+        public void TryGetRelative_段名大小写相同_视为同一层()
+        {
+            string relative;
+            PathCombiner.TryGetRelative("/docs/Sub", "/docs/Sub/b.txt", out relative, out _);
+
             Assert.AreEqual("b.txt", relative);
         }
 

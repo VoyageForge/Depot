@@ -12,11 +12,20 @@ namespace VoyageForge.Depot.Editor.FileSystem
     public sealed class VfsDirectory : VfsNode
     {
         /// <summary>
-        /// 子节点表。想区分大小写就换成 StringComparer.Ordinal。
-        /// 默认忽略大小写，贴近 Windows / macOS 的常见用户体验。
+        /// 子节点表，按【区分大小写】比较（<see cref="System.StringComparer.Ordinal"/>）。
+        ///
+        /// 为什么刻意区分大小写？虚拟路径空间是我们自己定规则的地方，
+        /// 区分大小写能让行为在 Windows / Linux / macOS 上完全一致，
+        /// 不会出现"同一份代码在 Windows 上能查到、到 Linux 上查不到"的差异。
+        /// （Zio 的 SubFileSystem 同样默认按 Ordinal 比较。）
+        ///
+        /// 代价要知道：Windows 的磁盘本身不区分大小写，所以真实世界里的
+        /// "同一个文件"在本树里可能对应两个不同节点（"A.txt" 与 "a.txt"）。
+        /// 因为本类只做内存中的路径与节点管理、不与磁盘做一致性校验，
+        /// 这个代价是良性的。
         /// </summary>
         private readonly Dictionary<string, VfsNode> _children =
-            new Dictionary<string, VfsNode>(System.StringComparer.OrdinalIgnoreCase);
+            new Dictionary<string, VfsNode>(System.StringComparer.Ordinal);
 
         /// <summary>固定为 <see cref="NodeType.Directory"/>。</summary>
         public override NodeType Type => NodeType.Directory;

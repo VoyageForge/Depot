@@ -32,6 +32,20 @@ namespace VoyageForge.Depot.Editor.FileSystem
         /// <summary>使用了过多的 ".."，试图越过根目录，例如 "/../a"。</summary>
         EscapeRoot,
 
+        /// <summary>
+        /// 解析后的路径落在【根目录之外】。
+        /// 与 <see cref="EscapeRoot"/> 的区别：EscapeRoot 说的是"用 .. 往上爬越界"，
+        /// 本错误说的是"直接给了一条根目录之外的绝对路径"，例如根是 D:\Proj\Assets
+        /// 却传入了 D:\Other\x。
+        /// </summary>
+        OutsideRoot,
+
+        /// <summary>
+        /// 纯虚拟模式（没有指定根目录路径）下试图换算真实磁盘路径。
+        /// 见 <see cref="VirtualFileSystem.IsVirtual"/>。
+        /// </summary>
+        NoRootPath,
+
         /// <summary>拼接时某个片段非法（用于区分是"某段"而非"整条"出错）。</summary>
         InvalidSegment,
     }
