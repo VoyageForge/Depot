@@ -91,14 +91,17 @@ namespace VoyageForge.Depot.Runtime.Console
         /// <summary>
         /// 命令注册成功后调用（主线程，此时 RuntimeConsole 实例已创建）：
         /// 把启动窗口缓存填充进控制台，然后切换为实时转发。
+        /// 注：OnCreate 由 PollCommandScan（Update 中）触发，必然在 RuntimeConsole.Instance 创建完成之后。
         /// </summary>
         public override void OnCreate()
         {
             bool listen = AutoStartListening || PlayerPrefs.GetInt(ListenLogsPrefKey, 0) == 1;
 
-            // 填充启动窗口缓存：走非创建访问（FlushPendingLogs 内部判 HasInstance），
-            // 避免在初始化链上直接调用创建型 Instance 导致重入爆栈。
-            RuntimeConsole.FlushPendingLogs(PendingLogs);
+            // 填充启动窗口缓存（保留原始时间戳）
+            foreach (ConsoleLogEntry entry in PendingLogs)
+            {
+                RuntimeConsole.Instance.WriteLogEntry(entry);
+            }
             PendingLogs.Clear();
 
             // 取消缓存 handler，切换到最终状态

@@ -460,33 +460,6 @@ namespace VoyageForge.Depot.Runtime.Console
             RefreshIfShown();
         }
 
-        /// <summary>
-        /// 批量刷入启动窗口缓存的日志（非创建访问：实例不存在时安全跳过）。
-        /// 供 <see cref="ListenCommand.OnCreate"/> 填充启动早期日志，避免直接调用创建型 Instance。
-        /// </summary>
-        /// <param name="entries">待刷入的日志条目。</param>
-        public static void FlushPendingLogs(IReadOnlyList<ConsoleLogEntry> entries)
-        {
-            if (!HasInstance || entries == null || entries.Count == 0)
-            {
-                return;
-            }
-
-            Instance.FlushLogEntries(entries);
-        }
-
-        /// <summary>批量把日志条目写入缓冲（最后统一渲染一次）。</summary>
-        /// <param name="entries">日志条目集合。</param>
-        private void FlushLogEntries(IReadOnlyList<ConsoleLogEntry> entries)
-        {
-            foreach (ConsoleLogEntry entry in entries)
-            {
-                AddLogEntry(entry);
-            }
-
-            RefreshIfShown();
-        }
-
         /// <summary>把日志条目写入缓冲并通知外部与派生类（不渲染）。</summary>
         /// <param name="entry">日志条目。</param>
         private void AddLogEntry(ConsoleLogEntry entry)
