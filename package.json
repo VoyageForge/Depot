@@ -24,7 +24,9 @@
   "publishConfig": {
     "registry": "https://package.openupm.com"
   },
-  "dependencies": {},
+  "dependencies": {
+    "com.unity.modules.uielements": "1.0.0"
+  },
   "license": "MIT",
   "samples": [
     {

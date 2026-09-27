@@ -447,6 +447,30 @@ AndroidNotificationNotifier.CancelScheduledNotification(2001);
 
 ## 已知问题
 
+### 缺少 UIElements 内置模块（CS1069）
+
+**现象**：`Runtime/Scripts/Console` 下的脚本整片编译失败，控制台刷出数十条同源错误，形如：
+
+```
+Assets\Depot\Runtime\Scripts\Console\RuntimeConsole.cs(61,17): error CS1069: The type name
+'VisualElement' could not be found in the namespace 'UnityEngine.UIElements'. This type has
+been forwarded to assembly 'UnityEngine.UIElementsModule, Version=0.0.0.0, Culture=neutral,
+PublicKeyToken=null' Enable the built in package 'UIElements' in the Package Manager window
+to fix this error.
+```
+
+报错类型集中在 UI Toolkit 的运行时类型：`VisualElement`、`UIDocument`、`ListView`、`ScrollView`、`TextField`、`Label`、`PanelSettings`、`PanelTextSettings`、`PointerDownEvent` / `PointerMoveEvent` / `PointerUpEvent`、`KeyDownEvent`；涉及文件为 `RuntimeConsole.cs`、`ConsoleLogList.cs`、`ConsoleCommandLine.cs`。
+
+**原因**：运行时控制台基于 UI Toolkit（UXML + USS）实现，依赖内置模块 `com.unity.modules.uielements`。宿主项目的 `Packages/manifest.json` 若未声明该模块，`UnityEngine.UIElementsModule` 不会被加载，所有 UI Toolkit 类型都会以 CS1069 报出。注意 `com.unity.modules.ui` 是 uGUI / IMGUI 模块，**不能替代** UIElements。
+
+**修复**：在宿主项目 `Packages/manifest.json` 的 `dependencies` 中加入：
+
+```json
+"com.unity.modules.uielements": "1.0.0",
+```
+
+保存后 Unity 会自动解析内置包并重新编译。Depot 自 v0.0.25 起已在 `package.json` 中声明该依赖，通过 UPM 正常安装时会自动带上。
+
 ### Gradle 构建警告
 
 #### flatDir 仓库与集中管理策略冲突

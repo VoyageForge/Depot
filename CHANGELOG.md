@@ -2,6 +2,11 @@
 
 本文件由开发者手动维护，发布流程不会自动生成或修改此文件。
 
+## Unreleased
+
+### Fixed
+- `package.json` 声明 `com.unity.modules.uielements` 依赖：宿主项目缺少该内置模块时，`Runtime/Scripts/Console` 下所有 UI Toolkit 类型会报 CS1069 导致整片编译失败。README「已知问题」补充了该报错的现象、原因与修法。
+
 ## v0.0.25
 
 ### Added
