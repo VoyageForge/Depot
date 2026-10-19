@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
@@ -13,7 +13,13 @@ namespace VoyageForge.Depot.Editor
         /// <summary>将元数据序列化到指定文件路径（迭代实现）</summary>
         public static void Serialize(string filePath, ForgeMetadata data)
         {
-            using var writer = new StreamWriter(filePath, false, Encoding.UTF8);
+            // 编码与行尾都固定下来，保证同一个 ForgeMetadata 在任何平台、任何一次写入都得到完全相同的字节。
+            // 1. 编码用不带 BOM 的 UTF-8。Encoding.UTF8 会写入 EF BB BF 三个字节，而 Unity 自己产出的
+            //    .meta / .unity / manifest.json 等文本文件都不带 BOM；保持一致，也避免不吃 BOM 的
+            //    第三方解析器把首行键读成 "\uFEFFv"。
+            // 2. 行尾固定 LF。StreamWriter 默认取 Environment.NewLine，Windows 上会写成 CRLF，
+            //    跨平台协作时整文件每一行都会变，git diff 里全是行尾噪音。
+            using var writer = new StreamWriter(filePath, false, new UTF8Encoding(false)) { NewLine = "\n" };
             // 写入版本和 GUID 作为顶层键
             writer.WriteLine($"v: {data.version}");
             writer.WriteLine($"guid: {data.guid ?? ""}");

@@ -2,6 +2,29 @@
 
 本文件由开发者手动维护，发布流程不会自动生成或修改此文件。
 
+## Unreleased
+
+### Added
+- 新增 `ForgeMetaDatabase.SetNestedFieldBatch(IEnumerable<ForgeMetaWrite>)` 批量写入入口：整批只触发一次 `AssetDatabase.Refresh()`，并返回实际发生改动的条数。单条失败只记录错误日志、不中断整批。
+- 新增公共只读结构体 `ForgeMetaWrite`（guid + 点分路径 + 值），作为批量写入的条目类型。
+- 新增 EditMode 测试 `ForgeMetaDatabaseLineEndingTests`：覆盖单条写入与批量写入的编码/行尾约定，以及读取历史 BOM + CRLF 文件的兼容性。
+
+### Fixed
+- `.forge~` 的行尾固定写为 LF。原先 `ForgeMetaSerializer.Serialize` 用 `StreamWriter.WriteLine`，行尾取 `Environment.NewLine`，在 Windows 上写成 CRLF、在 macOS/Linux 上写成 LF，导致同一份元数据跨平台时整文件每一行都变、diff 全是无关噪音。
+- `.forge~` 不再写入 UTF-8 BOM。原先使用 `Encoding.UTF8`，会额外写入 `EF BB BF` 三个字节；Unity 自己产出的 `.meta` / `.unity` / `manifest.json` 等文本文件都不带 BOM，且不识别 BOM 的第三方解析器会把首行键读成 `\uFEFFv`。现在与 Unity 的约定一致。
+- 以上两条只影响新写入的内容：历史 BOM + CRLF 文件仍可正常读取，下次写入时自动归一化为 UTF-8 无 BOM + LF。
+
+### Changed
+- `SetNestedField` 的单条写入行为不变（仍每条刷新一次），内部改为调用可返回"是否发生改动"的核心方法 `ApplyNestedField`，供批量入口复用。
+- 批量写入期间 `SaveMetadata` 与 `Delete` 延后刷新，避免"删空字段即删文件"这条路径也逐条触发 AssetDatabase 扫描。
+- `ForgeMetaExample` 的「批量设置元数据」菜单改用批量入口，30 个资源实测由约 900 ms 降至约 56 ms。
+- `VoyageForge.Depot.Tests.EditMode` 增加对 `VoyageForge.Depot.Editor` 的引用，使测试可以覆盖编辑器侧的 `ForgeMetaDatabase`。
+
+### Removed
+- 移除 `Editor/Scripts/ProjectBrowserAlias`：Project 窗口资源别名窗口、别名编辑菜单与 4 个 Harmony 补丁，以及随附的第三方依赖 DLL（HarmonyX、MonoMod 系列、Mono.Cecil、System.Text.Json / Encodings.Web、Bcl.AsyncInterfaces 等）。
+  受影响的公开成员：`VoyageForge.Depot.Editor.ProjectBrowserAlias`（含 `PackageName` / `AliasKey` 常量）以及 `ProjectBrowserAliasWindow` 不再存在。**ForgeMeta 元数据能力不受影响**：`com.voyageforge.depot.Alias` 这一历史命名空间仍可用 `ForgeMetaDatabase` 正常读写，需要引用该键的地方请直接使用字面量 `"com.voyageforge.depot.Alias"`。
+- 移除 `Editor/Scripts/PathCodeGenerator`：按目录结构生成资源路径常量类的工具（菜单 `VoyageForge → Depot → Generate Asset Paths`）。
+
 ## v0.0.25
 
 ### Added

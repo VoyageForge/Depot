@@ -10,6 +10,7 @@ Depot 是 VoyageForge 的基础工具仓库，定位为 Unity 开发过程中的
 - 基于 UI Toolkit 的运行时控制台，支持直接输出日志、按需桥接 Unity 日志、按类型过滤与执行命令。
 - Android 原生能力封装，例如后台保活、APK 安装、系统设置跳转与后续可扩展的移动端桥接能力。
 - 编辑器辅助能力，例如只读属性绘制、Project Settings 配置、构建前自动版本处理与启动项控制。
+- ForgeMeta 元数据能力：以 Unity 资源 GUID 为键，读写资源旁的 `.forge~` 伴随文件，支持嵌套字段的单条与批量写入。
 - 面向包开发的基础设施，例如程序集划分、打包元数据与工作流配置。
 
 ## 目录说明
@@ -444,6 +445,66 @@ AndroidNotificationNotifier.CancelScheduledNotification(2001);
 插件使用 Foreground Service、常驻通知、`PARTIAL_WAKE_LOCK`、`AlarmManager.setAndAllowWhileIdle`、`BroadcastReceiver`、`BOOT_COMPLETED` 和电池优化白名单请求来提高后台存活概率。
 
 这些能力不能保证对抗系统或用户触发的强制停止。若厂商系统执行 `force-stop` 或最近任务强清，普通第三方应用无法通过公开 API 立即自恢复。
+
+## ForgeMeta 元数据
+
+`ForgeMetaDatabase` 是 Depot 的编辑器元数据 API：以 Unity 资源 GUID 为键，读写资源旁的伴随文件 `<资源路径>.forge~`（例如 `Assets/UI/LoginPanel.prefab.forge~`）。字段按点分隔的命名空间组织，可以任意嵌套。
+
+### 读写字段
+
+```csharp
+string guid = AssetDatabase.AssetPathToGUID("Assets/UI/LoginPanel.prefab");
+
+// 合并路径写法
+ForgeMetaDatabase.SetNestedField(guid, "com.voyageforge.depot.layer", "UI");
+
+// 分离路径 + 键，与上面完全等价
+ForgeMetaDatabase.SetNestedField(guid, "com.voyageforge.depot", "layer", "UI");
+
+// 读取
+string layer;
+if (ForgeMetaDatabase.TryGetNestedField(guid, "com.voyageforge.depot.layer", out layer))
+    Debug.Log(layer);
+```
+
+值的语义：
+
+- 中间节点不存在时自动创建，不需要预先声明命名空间。
+- 传入空字符串表示删除该键；字段被清空后整个 `.forge~` 文件会被删除。
+- 目标值与现有值相同则不产生任何写入。
+
+### 批量写入
+
+逐条调用 `SetNestedField` 时，每写一个文件都会触发一次 `AssetDatabase.Refresh()`，资源数量一多就非常慢。需要写多个资源时用批量入口：
+
+```csharp
+var writes = new List<ForgeMetaWrite>
+{
+    new ForgeMetaWrite(guidA, "com.voyageforge.forge-filesystem.displayName", "登录面板"),
+    new ForgeMetaWrite(guidB, "com.voyageforge.forge-filesystem.displayName", "设置面板")
+};
+
+int applied = ForgeMetaDatabase.SetNestedFieldBatch(writes);
+```
+
+- 整批结束后只刷新一次 `AssetDatabase`，未产生改动时连这一次也省掉；
+- 返回实际发生改动的条数，值未变的条目不计入；
+- 单条失败（GUID 无法解析、序列化异常等）只记录错误日志并继续处理其余条目，不中断整批。
+
+实测参考：写入 30 个资源，逐条写入约 900 ms，批量写入约 56 ms。
+
+### 文件格式约定
+
+- 编码 **UTF-8 无 BOM**，行尾 **LF**。与 Unity 自己产出的 `.meta` / `.unity` / `manifest.json` 等文本文件保持一致，跨平台提交不会产生行尾或 BOM 噪音。
+- 历史文件如果带 BOM 或 CRLF 仍可正常读取；下次写入时会自动归一化为上述格式。
+- 序列化器按 `键: 值` 直写、不加引号。因此字段值不要包含换行；包含 `:`、`#` 等 YAML 语法字符的值会被误解析，需要调用方自行规避。
+
+### 生命周期
+
+`ForgeMetaAssetHandler` 负责伴随文件与资源保持一致：
+
+- 移动资源时，`.forge~` 随资源一起移动；
+- 删除资源时，`.forge~` 一并删除。Unity 内删除与「外部删除后刷新检测到」两种情况都已覆盖。
 
 ## 已知问题
 
