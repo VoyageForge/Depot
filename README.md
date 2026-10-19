@@ -498,6 +498,7 @@ int applied = ForgeMetaDatabase.SetNestedFieldBatch(writes);
 - 编码 **UTF-8 无 BOM**，行尾 **LF**。与 Unity 自己产出的 `.meta` / `.unity` / `manifest.json` 等文本文件保持一致，跨平台提交不会产生行尾或 BOM 噪音。
 - 历史文件如果带 BOM 或 CRLF 仍可正常读取；下次写入时会自动归一化为上述格式。
 - 序列化器按 `键: 值` 直写、不加引号。因此字段值不要包含换行；包含 `:`、`#` 等 YAML 语法字符的值会被误解析，需要调用方自行规避。
+- **使用 Depot 的项目建议**在自己的 `.gitattributes` 里加一行 `*.forge~ text eol=lf`。Depot 已保证写入 LF，但 `core.autocrlf=true` 的项目在检出时仍可能把工作区文件转成 CRLF；而 git 属性只对所在仓库生效、**不会随 UPM 包传播**，所以每个宿主项目都需要自行声明。
 
 ### 生命周期
 
