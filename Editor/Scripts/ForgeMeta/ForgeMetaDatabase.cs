@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
@@ -20,6 +20,16 @@ namespace VoyageForge.Depot.Editor
         }
 
         private static readonly Dictionary<string, CacheEntry> _cache = new Dictionary<string, CacheEntry>();
+
+        /// <summary>
+        /// 批量写入的嵌套深度。大于 0 表示当前正处于批量写入中，
+        /// 此时每次字段改动都不必单独刷新 AssetDatabase，由批量入口在整批结束后统一刷新一次。
+        ///
+        /// 用深度计数而不是 bool，是为了让批量操作内部再嵌套批量调用时，
+        /// 内层结束后不会提前把刷新行为恢复成"每条都刷"。
+        /// </summary>
+        private static int _batchDepth;
+
 
         /// <summary>
         /// 根据资产 GUID 获取对应的伴随文件路径（格式：原文件名.forge~）。
@@ -106,18 +116,78 @@ namespace VoyageForge.Depot.Editor
         /// </summary>
         public static void SetNestedField(string guid, string path, string value)
         {
+            ApplyNestedField(guid, path, value);
+        }
+
+        /// <summary>
+        /// 批量写入多个字段，返回实际发生改动的条数。
+        ///
+        /// 与循环调用 SetNestedField 的唯一区别是刷新时机：单条写入每写一条就调用一次
+        /// AssetDatabase.Refresh()，写 N 条就刷 N 次；批量写入在整批结束后只刷一次。
+        /// 文件本身仍然是一条一个 .forge~，合并规则、缓存更新、"值相同则跳过"的判断
+        /// 与单条写入完全一致——所以批量入口不会写出和单条不同的结果。
+        ///
+        /// 单条失败（GUID 无法解析、序列化异常等）只记录错误日志并继续处理其余条目，
+        /// 不会中断整批，因此返回值可能小于传入条数。
+        /// </summary>
+        public static int SetNestedFieldBatch(IEnumerable<ForgeMetaWrite> writes)
+        {
+            if (writes == null)
+                return 0;
+
+            int applied = 0;
+            _batchDepth++;
+            try
+            {
+                foreach (ForgeMetaWrite write in writes)
+                {
+                    try
+                    {
+                        if (ApplyNestedField(write.Guid, write.Path, write.Value))
+                            applied++;
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogError(
+                            $"[ForgeMeta] 批量写入失败 guid={write.Guid} path={write.Path} → {exception.Message}");
+                    }
+                }
+            }
+            finally
+            {
+                // 必须放在 finally：某条写入抛异常也要恢复正常的刷新行为，
+                // 否则这一批之后所有单条写入都会静默地不再刷新 AssetDatabase。
+                _batchDepth--;
+            }
+
+            // 整批只刷新一次；没有任何实际改动时连这一次也省掉。
+            if (applied > 0)
+                AssetDatabase.Refresh();
+
+            return applied;
+        }
+
+        /// <summary>
+        /// 真正执行一次字段写入，返回是否发生了改动。
+        ///
+        /// 单独抽出来是因为批量写入需要知道每条是否真的改了（未变化的条目不计入返回值），
+        /// 而原来对外暴露的 void 版本无法表达这一点。
+        /// </summary>
+        private static bool ApplyNestedField(string guid, string path, string value)
+        {
             if (string.IsNullOrEmpty(path))
-                return;
+                return false;
 
             string forgePath = GetForgeFilePath(guid);
             if (forgePath == null)
-                return;
+                return false;
 
             var meta = Get(guid) ?? new ForgeMetadata(guid);
             if (!SetNestedValue(meta.fields, path, value))
-                return;
+                return false;
 
             SaveMetadata(meta, forgePath, guid);
+            return true;
         }
 
         /// <summary>
@@ -255,7 +325,10 @@ namespace VoyageForge.Depot.Editor
                 meta.guid = guid;
 
             ForgeMetaSerializer.Serialize(forgePath, meta);
-            AssetDatabase.Refresh();
+
+            // 批量写入期间不逐条刷新，由 SetNestedFieldBatch 在整批结束后统一刷一次。
+            if (_batchDepth == 0)
+                AssetDatabase.Refresh();
 
             _cache[guid] = new CacheEntry
             {
@@ -274,7 +347,10 @@ namespace VoyageForge.Depot.Editor
             if (File.Exists(forgePath))
             {
                 File.Delete(forgePath);
-                AssetDatabase.Refresh();
+
+                // 批量写入期间同样延后刷新，避免删除也逐条触发一次 AssetDatabase 扫描。
+                if (_batchDepth == 0)
+                    AssetDatabase.Refresh();
             }
             _cache.Remove(guid);
         }

@@ -161,3 +161,17 @@ Packages/packages-lock.json linguist-generated
 
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
+
+# ---------------------------------------------------------------------------
+# 项目本地追加：以下规则不在上游 Unity.gitattributes 模板中，
+# 重新同步模板（文件头 Last synced 那一行）时请保留本节。
+#
+# ForgeMeta 伴随文件（.forge~）：
+# - text   按文本处理，参与行尾规范化与 diff，不要被识别成二进制。
+# - eol=lf 检出时强制写 LF，覆盖 Windows 上 core.autocrlf=true 的 CRLF 转换。
+#   Depot 的 ForgeMetaSerializer 已固定输出 LF + 无 BOM；如果检出时被转成 CRLF，
+#   下一次写入又会归一化回 LF，凭空产生一条「整文件都变了」的假 diff。
+*.forge~                text eol=lf
+#
+# 注意：git 属性只对当前仓库生效，不会随 UPM 包传播到宿主项目。
+# 使用 Depot 的项目请在自己的 .gitattributes 中单独添加上面那一行。

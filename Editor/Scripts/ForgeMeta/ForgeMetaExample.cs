@@ -1,4 +1,4 @@
-﻿using UnityEditor;
+using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
 
@@ -84,15 +84,21 @@ namespace VoyageForge.Depot.Editor
                 return;
 
             int count = 0;
+            // 先收集成批量写入记录，再一次提交：整批只会触发一次 AssetDatabase.Refresh()，
+            // 而不是每个资源刷一次。值取同一个时间戳，整批写入内容保持一致。
+            string timestamp = System.DateTime.Now.ToString();
+            var writes = new List<ForgeMetaWrite>();
             foreach (string guid in guids)
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 if (AssetDatabase.IsValidFolder(path))
                     continue;
-                ForgeMetaDatabase.SetNestedField(guid, "com.voyageforge.batch.time", System.DateTime.Now.ToString());
+                writes.Add(new ForgeMetaWrite(guid, "com.voyageforge.batch.time", timestamp));
                 count++;
             }
-            Debug.Log($"[ForgeMeta] 已为 {count} 个资源批量写入");
+
+            int applied = ForgeMetaDatabase.SetNestedFieldBatch(writes);
+            Debug.Log($"[ForgeMeta] 已为 {count} 个资源批量写入，实际改动 {applied} 个");
         }
 
         [MenuItem("VoyageForge/Depot/ForgeMeta/显示 GUID")]
