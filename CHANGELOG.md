@@ -2,7 +2,7 @@
 
 本文件由开发者手动维护，发布流程不会自动生成或修改此文件。
 
-## Unreleased
+## v0.0.26
 
 ### Added
 - 新增 `ForgeMetaDatabase.SetNestedFieldBatch(IEnumerable<ForgeMetaWrite>)` 批量写入入口：整批只触发一次 `AssetDatabase.Refresh()`，并返回实际发生改动的条数。单条失败只记录错误日志、不中断整批。
