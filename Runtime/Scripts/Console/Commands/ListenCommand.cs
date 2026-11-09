@@ -242,16 +242,35 @@ namespace VoyageForge.Depot.Runtime.Console
             // 正在输入第一个参数
             if (args.Length == 0)
             {
-                return new[] { "on", "off", "autostart" };
+                return FilterByPrefix(new[] { "on", "off", "autostart" }, currentInput);
             }
 
             // 第一个参数是 autostart，正在输入第二个参数
             if (args.Length == 1 && string.Equals(args[0], "autostart", StringComparison.OrdinalIgnoreCase))
             {
-                return new[] { "on", "off" };
+                return FilterByPrefix(new[] { "on", "off" }, currentInput);
             }
 
             return Array.Empty<string>();
+        }
+
+        /// <summary>按当前输入片段做前缀过滤（忽略大小写）；空输入时返回全部候选。</summary>
+        private static IReadOnlyList<string> FilterByPrefix(string[] candidates, string currentInput)
+        {
+            if (string.IsNullOrEmpty(currentInput))
+            {
+                return candidates;
+            }
+
+            var result = new List<string>(candidates.Length);
+            foreach (string candidate in candidates)
+            {
+                if (candidate.StartsWith(currentInput, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(candidate);
+                }
+            }
+            return result;
         }
     }
 }
