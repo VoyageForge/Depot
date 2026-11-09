@@ -6,6 +6,10 @@
 
 ### Fixed
 - `package.json` 声明 `com.unity.modules.uielements` 依赖：宿主项目缺少该内置模块时，`Runtime/Scripts/Console` 下所有 UI Toolkit 类型会报 CS1069 导致整片编译失败。README「已知问题」补充了该报错的现象、原因与修法。
+- 重建 `Runtime/Resources/Depot/Console/RuntimeConsole.asset`（PanelSettings）：原资产的 `m_Script` 指向已失效的 GUID，运行时 `Resources.Load<PanelSettings>` 拿到的是"脚本丢失"对象，于是回退到运行时创建的默认设置并连带报出三条错（`The referenced script (Unknown) on this Behaviour is missing!`、`[RuntimeConsole] 未找到 PanelSettings 资源…`、`No Theme Style Sheet set to PanelSettings…`）。重建后 `m_Script` 恢复为 Unity 内置类型的正确引用（`fileID: 19101, type: 0`），`themeUss` 仍指向同目录的 `RuntimeConsole.tss`。
+
+### Changed
+- `listen` 命令的参数补全改为按当前输入片段做前缀过滤（忽略大小写）：例如输入 `a` 只补全 `autostart`，不再一次性列出全部候选；空输入仍返回全部候选。
 
 ## v0.0.26
 
