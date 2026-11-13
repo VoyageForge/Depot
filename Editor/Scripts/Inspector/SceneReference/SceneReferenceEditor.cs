@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using VoyageForge.Depot.Runtime.Utilities;
 using UnityEditor;
 using UnityEditor.UIElements;
@@ -49,7 +49,16 @@ namespace VoyageForge.Depot.Editor
             var summaryLabel = rootElement.Q<Label>("SummaryValue");
             var pathLabel = rootElement.Q<VisualElement>("ScenePath").Q<Label>("Value");
             var nameLabel = rootElement.Q<VisualElement>("SceneName").Q<Label>("Value");
-            string propertyKey = $"{property.serializedObject.targetObject.GetInstanceID()}:{property.propertyPath}";
+            // 对象标识：Unity 6.4+ 提供 EntityId，GetInstanceID() 从 6000.5 起已是 error 级废弃
+            // （CS0619: 'Use GetEntityId instead'）。EntityId 的隐式 int 转换同样已废弃，
+            // 所以这里直接 ToString() 当缓存键，不做数值转换。
+            // 低版本（2022.3 ~ 6000.3）继续用 InstanceID，保持包对旧 Unity 的兼容。
+#if UNITY_6000_4_OR_NEWER
+            string objectId = property.serializedObject.targetObject.GetEntityId().ToString();
+#else
+            string objectId = property.serializedObject.targetObject.GetInstanceID().ToString();
+#endif
+            string propertyKey = $"{objectId}:{property.propertyPath}";
 
             objectField.objectType = typeof(SceneAsset);
             sceneDetailsFoldout.value = GetFoldoutState(propertyKey);
