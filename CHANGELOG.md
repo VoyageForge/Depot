@@ -2,6 +2,17 @@
 
 本文件由开发者手动维护，发布流程不会自动生成或修改此文件。
 
+## Unreleased
+
+### Changed
+- Android 原生能力整体迁入示例：`Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib` 与 `Runtime/Scripts/Android` 下的 C# 桥接（保活、通知、APK 安装、原生日志诊断）移到 `Samples~/AndroidKeepAliveSample`，命名空间由 `VoyageForge.Depot.Runtime.Android` 改为 `VoyageForge.Depot.Samples.Android`。depot 不再内置 Android 原生插件，需要保活、通知或 APK 安装能力时请在 Package Manager 导入 `Android Keep Alive Sample`。
+
+### Removed
+- 移除 Runtime Console 与 Console 样本：`Runtime/Scripts/Console`、`Runtime/Resources/Depot/Console`、`Samples~/Console`、`Tests/EditMode/ConsoleCommandRegistryTests.cs`，以及 `package.json` 中的 `Runtime Console Sample` 声明。
+
+### Fixed
+- `SceneReferenceEditor` 兼容 Unity 6.5：`Object.GetInstanceID()` 自 6000.5 起为 error 级废弃（CS0619），改用 `UNITY_6000_4_OR_NEWER` 条件编译——6000.4+ 走 `GetEntityId().ToString()`，旧版本保留 `GetInstanceID()`。`EntityId` 的隐式 int 转换同样已废弃，因此不转 int。
+
 ## v0.0.27
 
 ### Fixed
