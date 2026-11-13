@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace VoyageForge.Depot.Runtime.Android
+namespace VoyageForge.Depot.Samples.Android
 {
     /// <summary>
     /// Android 原生日志诊断封装器，负责从 Unity 读取 VoyageForge Android Core 写入的文件日志路径并清理旧日志。

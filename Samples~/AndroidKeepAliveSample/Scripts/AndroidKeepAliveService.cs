@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace VoyageForge.Depot.Runtime.Android
+namespace VoyageForge.Depot.Samples.Android
 {
     /// <summary>
     /// Android 后台保活前台服务封装器，负责把 Unity 调用转发到 VoyageForge Android Core 原生服务。

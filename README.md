@@ -22,13 +22,11 @@ Depot 是 VoyageForge 的基础工具仓库，定位为 Unity 开发过程中的
   基于 UI Toolkit（UXML + USS）的运行时控制台实现。
 - `Runtime/Resources/Depot/Console`
   运行时控制台的 UXML 与 USS 资源。
-- `Runtime/Scripts/Android`
-  Unity C# 侧的 Android 原生能力调用封装。
-- `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib`
+- `Samples~/AndroidKeepAliveSample/Scripts`
+  Unity C# 侧的 Android 原生能力调用封装（保活、通知、APK 安装、原生日志诊断）。
+- `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib`
   VoyageForge Android Core 原生插件源码目录。
-- `Runtime/Plugins/Android/core-1.12.0.aar`
-  AndroidX Core 依赖，用于 `FileProvider` 等 AndroidX 能力。
-- `Samples~/Android`
+- `Samples~/AndroidKeepAliveSample`
   Android 原生能力的 Unity 调用示例，导入示例后可挂到场景对象或按钮事件上测试。
 - `Editor/Scripts/Utilities`
   Depot 的编辑器工具与 Project Settings 相关实现。
@@ -190,7 +188,7 @@ public sealed class HelloCommand : ConsoleCommand
 
 ## Android 原生插件
 
-`Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib` 是 VoyageForge Android Core 原生插件，用来承载 Unity 调用 Android 原生能力的通用实现。当前包含后台保活、通知栏通知与 APK 安装模块，后续权限、通知、电池、系统设置等 Android 能力也应继续收敛到这里。
+`Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib` 是 VoyageForge Android Core 原生插件，用来承载 Unity 调用 Android 原生能力的通用实现。当前包含后台保活、通知栏通知与 APK 安装模块，后续权限、通知、电池、系统设置等 Android 能力也应继续收敛到这里。
 
 ### 插件命名空间
 
@@ -203,28 +201,28 @@ public sealed class HelloCommand : ConsoleCommand
 
 | 路径 | 说明 |
 | --- | --- |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/AndroidManifest.xml` | 声明权限、前台服务、重启广播接收器和 FileProvider。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/build.gradle` | Android Library 编译配置，AndroidX Core 与 WorkManager 依赖统一从 Google Maven 解析。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/keepalive/CrucibleKeepAliveService.java` | 前台保活服务实现。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/keepalive/KeepAliveRestartReceiver.java` | 开机、闹钟和恢复广播接收器。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/task/VoyageForgeScheduledTaskService.java` | Android Service 内通用定时任务调度基类，供保活、通知和后续 Android 模块复用。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/diagnostics/VoyageForgeAndroidLogger.java` | Android 原生文件日志工具，用于诊断后台、广播、Service 和通知链路。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/notification/AndroidNotificationNotifier.java` | Android 下拉通知栏即时通知与定时通知调度实现。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/notification/ScheduledNotificationReceiver.java` | 定时通知广播接收器，用于 AlarmManager 触发和开机后恢复计划。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/notification/VoyageForgeScheduledNotificationWorker.java` | WorkManager 定时通知兜底任务，用于测试和系统允许时的补偿恢复。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/installer/AndroidPackageInstaller.java` | APK 安装器实现。 |
-| `Runtime/Plugins/Android/VoyageForgeAndroidCore.androidlib/res/xml/voyageforge_android_core_file_paths.xml` | FileProvider 可共享文件路径配置。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/AndroidManifest.xml` | 声明权限、前台服务、重启广播接收器和 FileProvider。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/build.gradle` | Android Library 编译配置，AndroidX Core 与 WorkManager 依赖统一从 Google Maven 解析。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/keepalive/CrucibleKeepAliveService.java` | 前台保活服务实现。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/keepalive/KeepAliveRestartReceiver.java` | 开机、闹钟和恢复广播接收器。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/task/VoyageForgeScheduledTaskService.java` | Android Service 内通用定时任务调度基类，供保活、通知和后续 Android 模块复用。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/diagnostics/VoyageForgeAndroidLogger.java` | Android 原生文件日志工具，用于诊断后台、广播、Service 和通知链路。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/notification/AndroidNotificationNotifier.java` | Android 下拉通知栏即时通知与定时通知调度实现。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/notification/ScheduledNotificationReceiver.java` | 定时通知广播接收器，用于 AlarmManager 触发和开机后恢复计划。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/notification/VoyageForgeScheduledNotificationWorker.java` | WorkManager 定时通知兜底任务，用于测试和系统允许时的补偿恢复。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/src/main/java/com/voyageforge/android/core/installer/AndroidPackageInstaller.java` | APK 安装器实现。 |
+| `Samples~/AndroidKeepAliveSample/Plugins/Android/VoyageForgeAndroidCore.androidlib/res/xml/voyageforge_android_core_file_paths.xml` | FileProvider 可共享文件路径配置。 |
 
 ### Unity C# 封装
 
-Unity 业务层应通过 `Runtime/Scripts/Android` 下的 C# 封装调用 Android 原生能力：
+Unity 业务层应通过 `Samples~/AndroidKeepAliveSample/Scripts` 下的 C# 封装调用 Android 原生能力：
 
 | 能力 | C# 封装 | 原生入口 |
 | --- | --- | --- |
-| 后台保活 | `VoyageForge.Depot.Runtime.Android.AndroidKeepAliveService` | `com.voyageforge.android.core.keepalive.CrucibleKeepAliveService` |
-| 通知栏通知 | `VoyageForge.Depot.Runtime.Android.AndroidNotificationNotifier` | `com.voyageforge.android.core.notification.AndroidNotificationNotifier` |
-| 原生日志诊断 | `VoyageForge.Depot.Runtime.Android.AndroidDiagnosticsLogger` | `com.voyageforge.android.core.diagnostics.VoyageForgeAndroidLogger` |
-| APK 安装 | `VoyageForge.Depot.Runtime.Android.AndroidPackageInstaller` | `com.voyageforge.android.core.installer.AndroidPackageInstaller` |
+| 后台保活 | `VoyageForge.Depot.Samples.Android.AndroidKeepAliveService` | `com.voyageforge.android.core.keepalive.CrucibleKeepAliveService` |
+| 通知栏通知 | `VoyageForge.Depot.Samples.Android.AndroidNotificationNotifier` | `com.voyageforge.android.core.notification.AndroidNotificationNotifier` |
+| 原生日志诊断 | `VoyageForge.Depot.Samples.Android.AndroidDiagnosticsLogger` | `com.voyageforge.android.core.diagnostics.VoyageForgeAndroidLogger` |
+| APK 安装 | `VoyageForge.Depot.Samples.Android.AndroidPackageInstaller` | `com.voyageforge.android.core.installer.AndroidPackageInstaller` |
 
 #### 保活函数
 
@@ -291,7 +289,7 @@ Unity 业务层应通过 `Runtime/Scripts/Android` 下的 C# 封装调用 Androi
 
 ```csharp
 using UnityEngine;
-using VoyageForge.Depot.Runtime.Android;
+using VoyageForge.Depot.Samples.Android;
 
 public sealed class KeepAliveExample : MonoBehaviour
 {
@@ -327,7 +325,7 @@ public sealed class KeepAliveExample : MonoBehaviour
 
 ```csharp
 using UnityEngine;
-using VoyageForge.Depot.Runtime.Android;
+using VoyageForge.Depot.Samples.Android;
 
 public sealed class ApkInstallExample : MonoBehaviour
 {
@@ -358,7 +356,7 @@ public sealed class ApkInstallExample : MonoBehaviour
 
 ```csharp
 using System;
-using VoyageForge.Depot.Runtime.Android;
+using VoyageForge.Depot.Samples.Android;
 
 AndroidNotificationNotifier.RequestPostNotificationsPermission();
 AndroidNotificationNotifier.ResetNotificationChannels();
@@ -406,7 +404,7 @@ AndroidNotificationNotifier.CancelScheduledNotification(2001);
 - 插件会排除 `kotlin-stdlib-jdk7` 和 `kotlin-stdlib-jdk8`，并统一强制 `kotlin-stdlib:1.8.22`，避免 Unity/AGP 7.4 的 `checkReleaseDuplicateClasses` 报 Kotlin 标准库重复类。
 - 插件会强制 `androidx.concurrent:concurrent-futures:1.1.0`，避免 Unity 2022 自带 D8 在处理较新的 `concurrent-futures:1.2.0` 时出现 dexing 异常。
 - 插件保留 `androidx.annotation:annotation-experimental:1.4.1`，这是当前环境已经解析成功的版本；Unity 2022 的 lint 可能会打印 Java 17 lint jar 警告，但在当前 `work-runtime:2.8.1` 组合下不阻塞 Release 构建。
-- 本地 `core-1.12.0.aar` 已移动到 `Runtime/Plugins/Android/_Disabled` 并改为 `.off` 后缀，避免 Unity 自动导入本地 AndroidX Core 与 WorkManager 的 Maven 依赖发生重复类冲突。
+- 本地 `core-1.12.0.aar` 已禁用并从包内移除，避免 Unity 自动导入本地 AndroidX Core 与 WorkManager 的 Maven 依赖发生重复类冲突。
 - `VoyageForgeScheduledTaskService` 没有手动创建 `Thread` 或 `Timer`；它使用主线程 `Looper` 上的 `Handler.post()` 和 `Handler.postDelayed()` 实现循环。每个任务执行后返回下一次延迟毫秒数，服务存活时会自动续约，服务进程被系统杀掉后循环也会停止。
 - Android 原生层会把保活、广播、Service 启动、AlarmManager 安排和通知发送结果写入 App 专属日志文件，默认路径类似 `/sdcard/Android/data/<应用包名>/files/voyageforge_logs/voyageforge_android_core.log`。如果划掉应用后没有任何新日志，通常表示厂商系统直接杀掉进程或拦截了广播/后台启动。
 - 日志首行会记录日志文件创建时间和路径；Unity UI 会额外写入界面打开、关闭、进入后台和回到前台的时间，方便和手机操作时间对齐排查。
@@ -436,7 +434,7 @@ AndroidNotificationNotifier.CancelScheduledNotification(2001);
 - `compileSdkVersion` 当前为 `35`。
 - `minSdkVersion` 当前为 `22`。
 - `targetSdkVersion` 当前为 `35`。
-- `androidx.core:core` 由 `Runtime/Plugins/Android/core-1.12.0.aar` 提供，用于 `FileProvider`。
+- `androidx.core:core` 等 AndroidX 依赖由 `VoyageForgeAndroidCore.androidlib/build.gradle` 从 Google Maven 解析，用于 `FileProvider` 等能力。
 - 旧的独立安装器 AAR 已禁用，安装能力已经源码化到 VoyageForge Android Core 插件中。
 - 建议至少开启 `ARM64`；`ARMv7` 仅用于兼容老设备。
 

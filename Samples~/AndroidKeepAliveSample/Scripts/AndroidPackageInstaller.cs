@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace VoyageForge.Depot.Runtime.Android
+namespace VoyageForge.Depot.Samples.Android
 {
     /// <summary>
     /// Android APK 安装桥接器，负责从 Unity 调用 VoyageForge Android Core 插件的安装能力。

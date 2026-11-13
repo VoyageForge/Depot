@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace VoyageForge.Depot.Runtime.Android
+namespace VoyageForge.Depot.Samples.Android
 {
     /// <summary>
     /// Android 通知声音模式。
