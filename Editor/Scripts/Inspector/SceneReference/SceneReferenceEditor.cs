@@ -4,7 +4,6 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
-using VoyageForge.Depot.Editor.Utilities;
 
 namespace VoyageForge.Depot.Editor
 {
@@ -21,7 +20,8 @@ namespace VoyageForge.Depot.Editor
         {
             if (_visualTreeAsset == null)
             {
-                _visualTreeAsset = UxmlUtility.LoadVisualTreeAsset(DefaultInspectorUxmlPath);
+                // 直接按 Asset 路径加载（原 UxmlUtility 已移除）。
+                _visualTreeAsset = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(DefaultInspectorUxmlPath);
             }
 
             if (_visualTreeAsset == null)

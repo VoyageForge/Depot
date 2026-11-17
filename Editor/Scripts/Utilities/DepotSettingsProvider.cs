@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine.UIElements;
 
@@ -88,8 +88,8 @@ namespace VoyageForge.Depot.Editor.Utilities
                 return _settingsVisualTreeAsset;
             }
 
-            _settingsVisualTreeAsset = UxmlUtility.LoadVisualTreeAsset(
-                SettingsUxmlPath);
+            // 直接按 Asset 路径加载（原 UxmlUtility 已移除：它的按名搜索能力在本包内没有使用场景）。
+            _settingsVisualTreeAsset = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(SettingsUxmlPath);
             return _settingsVisualTreeAsset;
         }
     }
